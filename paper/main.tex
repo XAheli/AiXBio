@@ -15,8 +15,8 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{float}
-\usepackage{natbib}
-\bibliographystyle{plainnat}
+\usepackage[numbers,sort&compress]{natbib}
+\bibliographystyle{unsrtnat}
 
 \hypersetup{
     colorlinks=true,
@@ -51,22 +51,22 @@
 
 % ── Abstract ──────────────────────────────────────────────────────────
 \begin{abstract}
-Current DNA synthesis screening relies on sequence homology to detect dangerous biological sequences. We show that AI protein design tools, specifically ProteinMPNN, generate functional threat variants with as low as 7\% sequence identity to known threats, completely evading homology-based screening. We introduce FuncScreen, a contrastive learning framework over frozen ESM-2 protein language model embeddings that screens by predicted biological function rather than sequence similarity. Trained with supervised contrastive loss and hard-negative mining on 985 curated pore-forming toxin and benign homolog sequences from UniProt, FuncScreen achieves 1.000 AUROC on standard and hard-negative evaluation splits. On 4,100 ProteinMPNN-designed adversarial variants, FuncScreen maintains 0.991 AUROC where k-mer homology drops to 0.952. At below 20\% sequence identity, homology screening achieves 0\% detection while FuncScreen retains approximately 65\% detection. We further provide the first certified robustness analysis for biosecurity screening under biologically structured mutations, finding an empirical-certified gap of at most 2\%. Our results demonstrate that function-space screening is a necessary complement to sequence-based approaches as AI-assisted biological design becomes more accessible.
+Current DNA synthesis screening relies on sequence homology, which AI protein design tools like ProteinMPNN evade by generating functional threat variants with as low as 7\% sequence identity to known threats. We introduce FuncScreen, a contrastive learning framework over frozen ESM-2 embeddings that screens by predicted biological function rather than sequence similarity. Trained with supervised contrastive loss and hard-negative mining on 985 curated pore-forming toxin and benign homolog sequences, FuncScreen achieves 1.000 AUROC on standard and hard-negative splits. On 4,100 ProteinMPNN-designed adversarial variants, FuncScreen maintains 0.991 AUROC where homology drops to 0.952. Below 20\% sequence identity, homology achieves 0\% detection while FuncScreen retains ~65\%. We further provide the first certified robustness analysis for biosecurity screening under biologically structured mutations, finding an empirical-certified gap of at most 2\%. Function-space screening is a necessary complement to sequence-based approaches.
 \end{abstract}
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Introduction}
 % ══════════════════════════════════════════════════════════════════════
 
-DNA synthesis screening is a critical chokepoint for preventing misuse of synthetic biology. Current screening infrastructure---including SecureDNA \citep{securedna2024} and the IBBIS Common Mechanism \citep{ibbis2024}---fundamentally relies on sequence homology: a query sequence is flagged if it is sufficiently similar to a known threat in a curated database. This approach has served the field well against natural sequences and simple mutations.
+DNA synthesis screening is a critical chokepoint for preventing misuse of synthetic biology. Current screening infrastructure including SecureDNA \cite{securedna2024} and the IBBIS Common Mechanism \cite{ibbis2024} fundamentally relies on sequence homology: a query sequence is flagged if it is sufficiently similar to a known threat in a curated database. This approach has served the field well against natural sequences and simple mutations.
 
-However, a new class of threats is emerging. AI protein design tools such as ProteinMPNN \citep{dauparas2022robust} can perform \emph{inverse folding}: given a protein's 3D backbone structure, they generate entirely new amino acid sequences predicted to fold into the same structure---and thus perform the same biological function. These designed sequences can share less than 30\% sequence identity with any naturally occurring protein, falling well below the detection threshold of homology-based screening. The Microsoft cross-sector study \citep{horvitz2025strengthening} demonstrated that AI-designed protein variants already evade existing screening pipelines, and recent ICLR 2026 papers including GeneBreaker and SafeProtein have further characterized this attack surface.
+However, a new class of threats is emerging. AI protein design tools such as ProteinMPNN \cite{dauparas2022robust} can perform \emph{inverse folding}: given a protein's 3D backbone structure, they generate entirely new amino acid sequences predicted to fold into the same structure and thus perform the same biological function. These designed sequences can share less than 30\% sequence identity with any naturally occurring protein, falling well below the detection threshold of homology-based screening. The Microsoft cross-sector study \cite{horvitz2025strengthening} demonstrated that AI-designed protein variants already evade existing screening pipelines, and recent ICLR 2026 papers including GeneBreaker and SafeProtein have further characterized this attack surface.
 
 The defensive response to this threat has been notably absent. While the attack side is well-characterized, no published work has built a screening system that operates in \emph{function space} rather than sequence space. This is the gap FuncScreen addresses.
 
 \subsection*{Our main contributions are:}
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{FuncScreen}, a contrastive learning framework over frozen ESM-2 \citep{lin2023evolutionary} embeddings that detects threat proteins by functional similarity rather than sequence homology, achieving perfect AUROC on standard and hard-negative splits.
+    \item \textbf{FuncScreen}, a contrastive learning framework over frozen ESM-2 \cite{lin2023evolutionary} embeddings that detects threat proteins by functional similarity rather than sequence homology, achieving perfect AUROC on standard and hard-negative splits.
     \item \textbf{A ProteinMPNN adversarial evaluation benchmark} of 4,100 inverse-folded variants across 164 threat proteins at 5 sampling temperatures, providing the first systematic stress test of screening against AI-designed evasion.
     \item \textbf{The first certified robustness analysis for biosecurity screening}, adapting randomized smoothing to biologically structured mutation spaces and quantifying the empirical-certified gap.
 \end{enumerate}
@@ -76,19 +76,19 @@ The defensive response to this threat has been notably absent. While the attack 
 % ══════════════════════════════════════════════════════════════════════
 
 \paragraph{DNA synthesis screening.}
-SecureDNA \citep{securedna2024} uses cryptographic distributed oblivious PRF to screen sequences as short as 30bp against a curated hazard database. The IBBIS Common Mechanism \citep{ibbis2024} employs HMM-based biorisk screening with best performance above 150bp. Both rely fundamentally on sequence similarity to known threats. The OSTP Framework \citep{ostp2024} established federal guidance requiring compliant providers, and the Biosecurity Modernization and Innovation Act of 2026 (S.3741) mandates screening by gene synthesis providers. However, as \citet{kim2026ai} notes, the legislation mandates homology-based screening without addressing AI-designed functional variants.
+SecureDNA \cite{securedna2024} uses cryptographic distributed oblivious PRF to screen sequences as short as 30bp against a curated hazard database. The IBBIS Common Mechanism \cite{ibbis2024} employs HMM-based biorisk screening with best performance above 150bp. Both rely fundamentally on sequence similarity to known threats. The OSTP Framework \cite{ostp2024} established federal guidance requiring compliant providers, and the Biosecurity Modernization and Innovation Act of 2026 (S.3741) mandates screening by gene synthesis providers. However, as Kim \cite{kim2026ai} notes, the legislation mandates homology-based screening without addressing AI-designed functional variants.
 
 \paragraph{AI-assisted evasion of screening.}
-\citet{horvitz2025strengthening} demonstrated that AI-designed synthetic protein variants can evade sequence-based screening. GeneBreaker and SafeProtein (both ICLR 2026) further characterize attack surfaces. Edison, Toner \& Esvelt \citep{edison2026assembling} showed that unregulated DNA fragments from dozens of providers are sufficient to assemble dangerous pathogens, demonstrating that fragment-level screening is needed.
+Horvitz et al.\ \cite{horvitz2025strengthening} demonstrated that AI-designed synthetic protein variants can evade sequence-based screening. GeneBreaker and SafeProtein (both ICLR 2026) further characterize attack surfaces. Edison et al.\ \cite{edison2026assembling} showed that unregulated DNA fragments from dozens of providers are sufficient to assemble dangerous pathogens, demonstrating that fragment-level screening is needed.
 
 \paragraph{Protein language models.}
-ESM-2 \citep{lin2023evolutionary} is a 650M-parameter protein language model trained on 65 million sequences from UniRef50. Its learned representations encode functional and structural information beyond raw sequence similarity. ProteinMPNN \citep{dauparas2022robust} performs inverse folding---designing sequences that fold into specified 3D structures---enabling generation of functionally equivalent but sequence-divergent proteins.
+ESM-2 \cite{lin2023evolutionary} is a 650M-parameter protein language model trained on 65 million sequences from UniRef50. Its learned representations encode functional and structural information beyond raw sequence similarity. ProteinMPNN \cite{dauparas2022robust} performs inverse folding; designing sequences that fold into specified 3D structures---enabling generation of functionally equivalent but sequence-divergent proteins.
 
 \paragraph{Contrastive learning for biological sequences.}
-Supervised contrastive learning \citep{khosla2020supervised} has been applied to molecular property prediction and protein function classification, but not to biosecurity screening. Our work is the first to use contrastive learning over PLM embeddings specifically for threat detection.
+Supervised contrastive learning \cite{khosla2020supervised} has been applied to molecular property prediction and protein function classification, but not to biosecurity screening. Our work is the first to use contrastive learning over PLM embeddings specifically for threat detection.
 
 \paragraph{Certified robustness.}
-Randomized smoothing \citep{cohen2019certified} provides provable robustness guarantees for classifiers. RS-Del \citep{huang2023rsdel} extended this to edit-distance perturbations on discrete sequences. We adapt the framework to biologically structured mutation spaces---the first application to biosecurity screening.
+Randomized smoothing \cite{cohen2019certified} provides provable robustness guarantees for classifiers. RS-Del \cite{huang2023rsdel} extended this to edit-distance perturbations on discrete sequences. We adapt the framework to biologically structured mutation spaces---the first application to biosecurity screening.
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Methods}
@@ -113,7 +113,7 @@ We constructed five evaluation splits designed to progressively stress-test scre
     \item \textbf{Hard negative} (299): threats paired exclusively with structurally similar benign proteins.
     \item \textbf{Sequence divergent} (144): threat sequences with low k-mer similarity to all training threats, testing generalization to naturally distant family members.
     \item \textbf{BLOSUM62 adversarial} (2,242): computationally mutated threat variants using BLOSUM62-conservative substitutions at 5\%--50\% mutation rates.
-    \item \textbf{ProteinMPNN adversarial} (4,374): inverse-folded variants generated by ProteinMPNN at 5 sampling temperatures (T=0.1, 0.3, 0.5, 0.8, 1.0) with 5 sequences per temperature per protein, producing variants with 7\%--60\% sequence identity to source threats. Structures were obtained from AlphaFold DB \citep{jumper2021highly}.
+    \item \textbf{ProteinMPNN adversarial} (4,374): inverse-folded variants generated by ProteinMPNN at 5 sampling temperatures (T=0.1, 0.3, 0.5, 0.8, 1.0) with 5 sequences per temperature per protein, producing variants with 7\%--60\% sequence identity to source threats. Structures were obtained from AlphaFold DB \cite{jumper2021highly}.
 \end{enumerate}
 
 \subsection{Embedding Extraction}
@@ -132,7 +132,7 @@ The \textbf{classification head} takes the 256-dim projection and produces a sca
 \begin{equation}
     \mathcal{L} = \alpha \cdot \mathcal{L}_{\text{SupCon}} + (1 - \alpha) \cdot \mathcal{L}_{\text{BCE}}
 \end{equation}
-where $\mathcal{L}_{\text{SupCon}}$ is the supervised contrastive loss \citep{khosla2020supervised} with temperature $\tau = 0.07$, $\mathcal{L}_{\text{BCE}}$ is binary cross-entropy, and $\alpha = 0.5$. The contrastive loss pulls together embeddings of the same class (threat or benign) and pushes apart different classes, while BCE provides direct classification signal.
+where $\mathcal{L}_{\text{SupCon}}$ is the supervised contrastive loss \cite{khosla2020supervised} with temperature $\tau = 0.07$, $\mathcal{L}_{\text{BCE}}$ is binary cross-entropy, and $\alpha = 0.5$. The contrastive loss pulls together embeddings of the same class (threat or benign) and pushes apart different classes, while BCE provides direct classification signal.
 
 \paragraph{Hard-negative mining.} For each threat protein in a batch, we identify the $k=3$ closest benign proteins in embedding space (by cosine similarity) and oversample them in training. This forces the model to learn a tight decision boundary in the region where threats and benign homologs are most easily confused.
 
@@ -151,9 +151,9 @@ We compare against four baselines representing the spectrum from traditional to 
 
 \subsection{Certified Robustness}
 
-We adapt randomized smoothing \citep{cohen2019certified} to biological mutation spaces. Given a base classifier $f$, we construct a smoothed classifier $g$ by:
+We adapt randomized smoothing \cite{cohen2019certified} to biological mutation spaces. Given a base classifier $f$, we construct a smoothed classifier $g$ by:
 \begin{enumerate}[leftmargin=*]
-    \item Applying $k$ random mutations to the input sequence (either \emph{conservative} within Dayhoff amino acid groups \citep{dayhoff1978model}, or \emph{unrestricted}).
+    \item Applying $k$ random mutations to the input sequence (either \emph{conservative} within Dayhoff amino acid groups \cite{dayhoff1978model}, or \emph{unrestricted}).
     \item Re-embedding the mutated sequence through ESM-2.
     \item Classifying via the contrastive model.
     \item Repeating for $n=200$ Monte Carlo samples and taking the majority vote.
@@ -315,72 +315,72 @@ We used Claude to assist with code development, debugging, and drafting sections
 % ══════════════════════════════════════════════════════════════════════
 % References
 % ══════════════════════════════════════════════════════════════════════
-\begin{thebibliography}{20}
+\begin{thebibliography}{13}
 
-\bibitem[Cohen et~al.(2019)]{cohen2019certified}
-Cohen, J., Rosenfeld, E., \& Kolter, Z. (2019).
-\newblock Certified adversarial robustness via randomized smoothing.
-\newblock In \emph{International Conference on Machine Learning}, pp.~1310--1320.
+\bibitem{securedna2024}
+SecureDNA.
+\newblock SecureDNA: Free, open-source DNA sequence screening, 2024.
+\newblock \url{https://securedna.org}.
 
-\bibitem[Dauparas et~al.(2022)]{dauparas2022robust}
-Dauparas, J., Anishchenko, I., Bennett, N., et~al. (2022).
-\newblock Robust deep learning--based protein sequence design using ProteinMPNN.
-\newblock \emph{Science}, 378(6615), 49--56.
-
-\bibitem[Dayhoff et~al.(1978)]{dayhoff1978model}
-Dayhoff, M.~O., Schwartz, R.~M., \& Orcutt, B.~C. (1978).
-\newblock A model of evolutionary change in proteins.
-\newblock In \emph{Atlas of Protein Sequence and Structure}, Vol.~5, pp.~345--352.
-
-\bibitem[Edison et~al.(2026)]{edison2026assembling}
-Edison, A., Toner, E., \& Esvelt, K. (2026).
-\newblock Assembling unregulated DNA segments bypasses synthesis screening: regulate fragments as select agents.
-\newblock \emph{Nature Communications}, 17(1), 1--8.
-
-\bibitem[Horvitz et~al.(2025)]{horvitz2025strengthening}
-Horvitz, E., et~al. (2025).
-\newblock Strengthening nucleic acid biosecurity screening against generative protein design tools.
-\newblock \emph{Science}, 390(6723), 1--8.
-
-\bibitem[Huang et~al.(2023)]{huang2023rsdel}
-Huang, Z., et~al. (2023).
-\newblock RS-Del: Edit distance robustness certificates for sequence classifiers via randomized deletion.
-\newblock In \emph{Advances in Neural Information Processing Systems}.
-
-\bibitem[IBBIS(2024)]{ibbis2024}
-IBBIS. (2024).
-\newblock Common mechanism for biorisk screening.
+\bibitem{ibbis2024}
+IBBIS.
+\newblock Common mechanism for biorisk screening, 2024.
 \newblock \url{https://github.com/ibbis-screening/common-mechanism}.
 
-\bibitem[Jumper et~al.(2021)]{jumper2021highly}
-Jumper, J., Evans, R., Pritzel, A., et~al. (2021).
-\newblock Highly accurate protein structure prediction with AlphaFold.
-\newblock \emph{Nature}, 596, 583--589.
+\bibitem{dauparas2022robust}
+J.~Dauparas, I.~Anishchenko, N.~Bennett, H.~Baek, F.~DiMaio, D.~Baker, et~al.
+\newblock Robust deep learning--based protein sequence design using {ProteinMPNN}.
+\newblock \emph{Science}, 378(6615):49--56, 2022.
 
-\bibitem[Khosla et~al.(2020)]{khosla2020supervised}
-Khosla, P., Teterwak, P., Wang, C., et~al. (2020).
-\newblock Supervised contrastive learning.
-\newblock In \emph{Advances in Neural Information Processing Systems}, 33, 18661--18673.
+\bibitem{horvitz2025strengthening}
+E.~Horvitz, D.~Baker, A.~Tewari, et~al.
+\newblock Strengthening nucleic acid biosecurity screening against generative protein design tools.
+\newblock \emph{Science}, 390(6723), October 2025.
 
-\bibitem[Kim(2026)]{kim2026ai}
-Kim, S. (2026).
-\newblock AI can already evade DNA synthesis screening. Congress's new bill doesn't address that.
-\newblock \emph{Bulletin of the Atomic Scientists}, March 2026.
-
-\bibitem[Lin et~al.(2023)]{lin2023evolutionary}
-Lin, Z., Akin, H., Rao, R., et~al. (2023).
+\bibitem{lin2023evolutionary}
+Z.~Lin, H.~Akin, R.~Rao, J.~Hie, Z.~Zhu, W.~Lu, et~al.
 \newblock Evolutionary-scale prediction of atomic-level protein structure with a language model.
-\newblock \emph{Science}, 379(6637), 1123--1130.
+\newblock \emph{Science}, 379(6637):1123--1130, 2023.
 
-\bibitem[OSTP(2024)]{ostp2024}
-White House Office of Science and Technology Policy. (2024).
-\newblock Framework for nucleic acid synthesis screening.
-\newblock April 2024. Effective April 29, 2025.
+\bibitem{khosla2020supervised}
+P.~Khosla, P.~Teterwak, C.~Wang, A.~Sarna, Y.~Tian, P.~Isola, et~al.
+\newblock Supervised contrastive learning.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 33:18661--18673, 2020.
 
-\bibitem[SecureDNA(2024)]{securedna2024}
-SecureDNA. (2024).
-\newblock SecureDNA: Free, open-source DNA sequence screening.
-\newblock \url{https://securedna.org}.
+\bibitem{cohen2019certified}
+J.~Cohen, E.~Rosenfeld, and J.~Z.~Kolter.
+\newblock Certified adversarial robustness via randomized smoothing.
+\newblock In \emph{International Conference on Machine Learning (ICML)}, pp.~1310--1320, 2019.
+
+\bibitem{huang2023rsdel}
+Z.~Huang, Y.~Shi, Z.~Wang, and Q.~Gu.
+\newblock {RS-Del}: Edit distance robustness certificates for sequence classifiers via randomized deletion.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2023.
+
+\bibitem{jumper2021highly}
+J.~Jumper, R.~Evans, A.~Pritzel, T.~Green, M.~Figurnov, O.~Ronneberger, et~al.
+\newblock Highly accurate protein structure prediction with {AlphaFold}.
+\newblock \emph{Nature}, 596:583--589, 2021.
+
+\bibitem{edison2026assembling}
+A.~Edison, E.~Toner, and K.~Esvelt.
+\newblock Assembling unregulated {DNA} segments bypasses synthesis screening: regulate fragments as select agents.
+\newblock \emph{Nature Communications}, 17(1), January 2026.
+
+\bibitem{kim2026ai}
+S.~Kim.
+\newblock {AI} can already evade {DNA} synthesis screening. {Congress's} new bill doesn't address that.
+\newblock March 2026.
+
+\bibitem{ostp2024}
+White House Office of Science and Technology Policy.
+\newblock Framework for nucleic acid synthesis screening, April 2024.
+\newblock Effective April 29, 2025.
+
+\bibitem{dayhoff1978model}
+M.~O.~Dayhoff, R.~M.~Schwartz, and B.~C.~Orcutt.
+\newblock A model of evolutionary change in proteins.
+\newblock In \emph{Atlas of Protein Sequence and Structure}, Vol.~5, pp.~345--352, 1978.
 
 \end{thebibliography}
 
@@ -396,7 +396,7 @@ FuncScreen is scoped to one threat family (pore-forming toxins). False positive 
 Our adversarial evaluation pipeline (ProteinMPNN variant generation + screening evasion quantification) could theoretically inform an adversary about screening blind spots. We mitigate this by: (a) focusing on \emph{defensive} capability development, (b) using only publicly known threat sequences from UniProt, (c) not providing specific evasion recipes, and (d) releasing the screening tool alongside the evaluation to enable immediate defensive deployment.
 
 \paragraph{Responsible disclosure.}
-The vulnerability we characterize---homology screening failure against AI-designed variants---is already known from published work \citep{horvitz2025strengthening}. Our contribution is the first \emph{defense}, not a new attack.
+The vulnerability we characterize i.e. homology screening failure against AI-designed variants is already known from published work \cite{horvitz2025strengthening}. Our contribution is the first \emph{defense}, not a new attack.
 
 \paragraph{Ethical considerations.}
 All threat sequences used are from public databases of naturally occurring proteins. No novel dangerous sequences were designed. ProteinMPNN variants are computational predictions with no experimental validation of function. The project was designed to strengthen, not weaken, biosecurity infrastructure.
