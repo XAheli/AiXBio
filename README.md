@@ -62,7 +62,7 @@ results/                        Checkpoints, figures, tables
 ### Requirements
 
 ```bash
-git clone https://github.com/XAheli/AiXBio.git aixbio
+git clone https://github.com/XAheli/AiXBio.git
 cd aixbio
 python -m venv .venv
 source .venv/bin/activate
