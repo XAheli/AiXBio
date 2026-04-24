@@ -1,0 +1,27 @@
+{
+  "train": {
+    "total": 438,
+    "threat": 164,
+    "benign": 274
+  },
+  "val": {
+    "total": 139,
+    "threat": 41,
+    "benign": 98
+  },
+  "test_standard": {
+    "total": 186,
+    "threat": 69,
+    "benign": 117
+  },
+  "test_hard_negative": {
+    "total": 299,
+    "threat": 69,
+    "benign": 230
+  },
+  "test_seq_divergent": {
+    "total": 144,
+    "threat": 61,
+    "benign": 83
+  }
+}

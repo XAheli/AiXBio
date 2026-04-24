@@ -1,0 +1,23 @@
+{
+  "total_sequences": 985,
+  "threat_sequences": 335,
+  "benign_sequences": 650,
+  "hard_negatives": 459,
+  "subcategory_counts": {
+    "pore_nontoxin": 279,
+    "hemolysin": 265,
+    "random_enzyme": 191,
+    "antimicrobial_pore": 86,
+    "macpf_nontoxin": 55,
+    "pore_forming_toxin": 41,
+    "perforin": 39,
+    "cytolysin_family": 22,
+    "aerolysin_family": 7
+  },
+  "length_stats": {
+    "mean": 473.9715736040609,
+    "median": 374.0,
+    "min": 51,
+    "max": 2000
+  }
+}
