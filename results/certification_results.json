@@ -1,0 +1,122 @@
+{
+  "conservative_k1": {
+    "mutation_type": "conservative",
+    "n_mutations": 1,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.94,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9542084971943919,
+    "mean_confidence": 0.9996,
+    "n_sequences": 50
+  },
+  "conservative_k2": {
+    "mutation_type": "conservative",
+    "n_mutations": 2,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.94,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9526443296575414,
+    "mean_confidence": 0.9985333333333333,
+    "n_sequences": 50
+  },
+  "conservative_k3": {
+    "mutation_type": "conservative",
+    "n_mutations": 3,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.94,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9489629060533405,
+    "mean_confidence": 0.9954666666666667,
+    "n_sequences": 50
+  },
+  "conservative_k5": {
+    "mutation_type": "conservative",
+    "n_mutations": 5,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.92,
+    "certification_rate": 0.98,
+    "mean_p_lower": 0.9443464600292153,
+    "mean_confidence": 0.9911999999999999,
+    "n_sequences": 50
+  },
+  "conservative_k8": {
+    "mutation_type": "conservative",
+    "n_mutations": 8,
+    "accuracy": 0.92,
+    "certified_accuracy": 0.92,
+    "certification_rate": 0.98,
+    "mean_p_lower": 0.9454422488831951,
+    "mean_confidence": 0.9921333333333334,
+    "n_sequences": 50
+  },
+  "conservative_k10": {
+    "mutation_type": "conservative",
+    "n_mutations": 10,
+    "accuracy": 0.92,
+    "certified_accuracy": 0.92,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9454310359781148,
+    "mean_confidence": 0.9928,
+    "n_sequences": 50
+  },
+  "random_k1": {
+    "mutation_type": "random",
+    "n_mutations": 1,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.94,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9542084971943919,
+    "mean_confidence": 0.9996,
+    "n_sequences": 50
+  },
+  "random_k2": {
+    "mutation_type": "random",
+    "n_mutations": 2,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.94,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9519498570656023,
+    "mean_confidence": 0.998,
+    "n_sequences": 50
+  },
+  "random_k3": {
+    "mutation_type": "random",
+    "n_mutations": 3,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.94,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9479413134178089,
+    "mean_confidence": 0.9945333333333334,
+    "n_sequences": 50
+  },
+  "random_k5": {
+    "mutation_type": "random",
+    "n_mutations": 5,
+    "accuracy": 0.94,
+    "certified_accuracy": 0.92,
+    "certification_rate": 0.98,
+    "mean_p_lower": 0.9439914148144517,
+    "mean_confidence": 0.9906666666666666,
+    "n_sequences": 50
+  },
+  "random_k8": {
+    "mutation_type": "random",
+    "n_mutations": 8,
+    "accuracy": 0.92,
+    "certified_accuracy": 0.92,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9453949665206329,
+    "mean_confidence": 0.9928,
+    "n_sequences": 50
+  },
+  "random_k10": {
+    "mutation_type": "random",
+    "n_mutations": 10,
+    "accuracy": 0.92,
+    "certified_accuracy": 0.92,
+    "certification_rate": 1.0,
+    "mean_p_lower": 0.9462142009018016,
+    "mean_confidence": 0.9939999999999999,
+    "n_sequences": 50
+  }
+}
