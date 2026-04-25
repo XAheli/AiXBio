@@ -28,12 +28,19 @@ from src.models.contrastive import FunctionAwareScreener
 from src.screening.baselines import (
     KmerScreener, CosineNNScreener, LinearScreener, KNNEmbeddingScreener,
 )
-from src.evaluation.metrics import compute_screening_metrics, detection_vs_divergence
+from src.evaluation.metrics import (
+    compute_screening_metrics, compute_screening_metrics_with_ci,
+    detection_vs_divergence, detection_vs_divergence_with_ci,
+    paired_bootstrap_test,
+)
 from src.evaluation.visualize import (
     plot_roc_curves, plot_pr_curves, plot_detection_vs_divergence,
+    plot_detection_vs_divergence_with_ci,
     plot_embedding_space, plot_training_curves, plot_results_heatmap,
-    plot_mpnn_detection_vs_identity, plot_identity_distribution,
+    plot_mpnn_detection_vs_identity, plot_mpnn_detection_vs_identity_with_ci,
+    plot_identity_distribution,
 )
+from sklearn.metrics import roc_auc_score
 from src.data.splits import compute_pairwise_identity_fast
 
 logging.basicConfig(
@@ -135,44 +142,58 @@ def main():
 
             # Collect predictions for ROC/PR plotting
             predictions = {}
+            all_scores = {}
 
             # K-mer baseline
             kmer_scores = kmer.predict_proba(test_seqs)
-            m = compute_screening_metrics(test_labels, kmer_scores, "kmer_sim", split_name)
-            all_results.append(m.to_dict())
+            r = compute_screening_metrics_with_ci(test_labels, kmer_scores, "kmer_sim", split_name)
+            all_results.append(r)
             predictions["kmer_sim"] = (test_labels, kmer_scores)
-            logger.info(f"  K-mer:        AUROC={m.auroc:.4f} AUPRC={m.auprc:.4f} R@P95={m.recall_at_95_precision:.4f}")
+            all_scores["kmer_sim"] = kmer_scores
+            logger.info(f"  K-mer:        AUROC={r['AUROC']} {r['AUROC_CI']}")
 
             # Cosine NN
             cosine_scores = cosine_nn.predict_proba(test_emb)
-            m = compute_screening_metrics(test_labels, cosine_scores, f"cosine_nn_{emb_type}", split_name)
-            all_results.append(m.to_dict())
+            r = compute_screening_metrics_with_ci(test_labels, cosine_scores, f"cosine_nn_{emb_type}", split_name)
+            all_results.append(r)
             predictions[f"cosine_nn_{emb_type}"] = (test_labels, cosine_scores)
-            logger.info(f"  Cosine NN:    AUROC={m.auroc:.4f} AUPRC={m.auprc:.4f} R@P95={m.recall_at_95_precision:.4f}")
+            all_scores[f"cosine_nn_{emb_type}"] = cosine_scores
+            logger.info(f"  Cosine NN:    AUROC={r['AUROC']} {r['AUROC_CI']}")
 
             # Linear
             linear_scores = linear.predict_proba(test_emb)
-            m = compute_screening_metrics(test_labels, linear_scores, f"linear_{emb_type}", split_name)
-            all_results.append(m.to_dict())
+            r = compute_screening_metrics_with_ci(test_labels, linear_scores, f"linear_{emb_type}", split_name)
+            all_results.append(r)
             predictions[f"linear_{emb_type}"] = (test_labels, linear_scores)
-            logger.info(f"  Linear:       AUROC={m.auroc:.4f} AUPRC={m.auprc:.4f} R@P95={m.recall_at_95_precision:.4f}")
+            all_scores[f"linear_{emb_type}"] = linear_scores
+            logger.info(f"  Linear:       AUROC={r['AUROC']} {r['AUROC_CI']}")
 
             # KNN
             knn_scores = knn.predict_proba(test_emb)
-            m = compute_screening_metrics(test_labels, knn_scores, f"knn_{emb_type}", split_name)
-            all_results.append(m.to_dict())
+            r = compute_screening_metrics_with_ci(test_labels, knn_scores, f"knn_{emb_type}", split_name)
+            all_results.append(r)
             predictions[f"knn_{emb_type}"] = (test_labels, knn_scores)
-            logger.info(f"  KNN:          AUROC={m.auroc:.4f} AUPRC={m.auprc:.4f} R@P95={m.recall_at_95_precision:.4f}")
+            all_scores[f"knn_{emb_type}"] = knn_scores
+            logger.info(f"  KNN:          AUROC={r['AUROC']} {r['AUROC_CI']}")
 
             # Contrastive (ours)
+            cont_scores = None
             if screener is not None:
                 with torch.no_grad():
                     test_tensor = torch.from_numpy(test_emb).float()
                     cont_scores = screener.predict_proba(test_tensor).numpy()
-                m = compute_screening_metrics(test_labels, cont_scores, f"contrastive_{emb_type}", split_name)
-                all_results.append(m.to_dict())
+                r = compute_screening_metrics_with_ci(test_labels, cont_scores, f"contrastive_{emb_type}", split_name)
+                all_results.append(r)
                 predictions[f"contrastive_{emb_type}"] = (test_labels, cont_scores)
-                logger.info(f"  Contrastive:  AUROC={m.auroc:.4f} AUPRC={m.auprc:.4f} R@P95={m.recall_at_95_precision:.4f}")
+                all_scores[f"contrastive_{emb_type}"] = cont_scores
+                logger.info(f"  Contrastive:  AUROC={r['AUROC']} {r['AUROC_CI']}")
+
+            # Paired bootstrap test: contrastive vs KNN
+            if cont_scores is not None:
+                p_val = paired_bootstrap_test(
+                    test_labels, cont_scores, knn_scores, roc_auc_score
+                )
+                logger.info(f"  Paired bootstrap (contrastive vs KNN): p={p_val:.4f}")
 
             # Plot ROC and PR curves
             plot_roc_curves(predictions, split_name)

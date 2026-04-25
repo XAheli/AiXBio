@@ -1,0 +1,16 @@
+ood_family,method,n_proteins,FPR_at_0.5,mean_score,max_score
+kinases,kmer_sim,98,0.0000,0.0019,0.0053
+kinases,cosine_nn,98,0.9898,0.9193,0.9726
+kinases,linear,98,0.0000,0.0253,0.3595
+kinases,knn,98,0.0000,0.0020,0.1947
+kinases,contrastive,98,0.0408,0.0420,0.9213
+gpcrs,kmer_sim,98,0.0000,0.0021,0.0054
+gpcrs,cosine_nn,98,0.9694,0.8238,0.9684
+gpcrs,linear,98,0.0000,0.0027,0.0689
+gpcrs,knn,98,0.0000,0.0021,0.2011
+gpcrs,contrastive,98,0.0306,0.0419,0.9943
+transcription_factors,kmer_sim,95,0.0000,0.0019,0.0055
+transcription_factors,cosine_nn,95,1.0000,0.9320,0.9746
+transcription_factors,linear,95,0.0000,0.0246,0.2893
+transcription_factors,knn,95,0.0105,0.0249,0.8119
+transcription_factors,contrastive,95,0.2421,0.2588,0.9942

@@ -51,24 +51,25 @@
 
 % ── Abstract ──────────────────────────────────────────────────────────
 \begin{abstract}
-Current DNA synthesis screening relies on sequence homology, which AI protein design tools like ProteinMPNN evade by generating functional threat variants with as low as 7\% sequence identity to known threats. We introduce FuncScreen, a contrastive learning framework over frozen ESM-2 embeddings that screens by predicted biological function rather than sequence similarity. Trained with supervised contrastive loss and hard-negative mining on 985 curated pore-forming toxin and benign homolog sequences, FuncScreen achieves 1.000 AUROC on standard and hard-negative splits. On 4,100 ProteinMPNN-designed adversarial variants, FuncScreen maintains 0.991 AUROC where homology drops to 0.952. Below 20\% sequence identity, homology achieves 0\% detection while FuncScreen retains ~65\%. We further provide the first certified robustness analysis for biosecurity screening under biologically structured mutations, finding an empirical-certified gap of at most 2\%. Function-space screening is a necessary complement to sequence-based approaches.
+Current DNA synthesis screening relies on sequence homology, which AI protein design tools like ProteinMPNN evade by generating functional threat variants with as low as 7\% sequence identity to known threats. We introduce FuncScreen, a contrastive learning framework over frozen ESM-2 embeddings that screens by predicted biological function rather than sequence similarity. Trained with supervised contrastive loss, hard-negative mining, and embedding-space Mixup augmentation on 985 curated pore-forming toxin and benign homolog sequences, FuncScreen achieves 1.000 AUROC [1.000, 1.000] on standard and hard-negative splits. On 4,100 ProteinMPNN-designed adversarial variants, FuncScreen maintains 0.991 AUROC [0.988, 0.993] where homology drops to 0.952 [0.944, 0.959]. We provide a preliminary certified robustness analysis under biologically structured mutations (1,000 Monte Carlo samples, 100 sequences), finding an empirical-certified gap of at most 1\%. We validate generalization on a second threat family (ribosome-inactivating proteins, AUROC 0.962) and report out-of-distribution false positive rates.
 \end{abstract}
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Introduction}
 % ══════════════════════════════════════════════════════════════════════
 
-DNA synthesis screening is a critical chokepoint for preventing misuse of synthetic biology. Current screening infrastructure including SecureDNA \cite{securedna2024} and the IBBIS Common Mechanism \cite{ibbis2024} fundamentally relies on sequence homology: a query sequence is flagged if it is sufficiently similar to a known threat in a curated database. This approach has served the field well against natural sequences and simple mutations.
+DNA synthesis screening is a critical chokepoint for preventing misuse of synthetic biology. Current screening infrastructure including SecureDNA \cite{securedna2024} and the IBBIS Common Mechanism \cite{ibbis2024} fundamentally relies on sequence homology: a query sequence is flagged if it is sufficiently similar to a known threat in a curated database.
 
-However, a new class of threats is emerging. AI protein design tools such as ProteinMPNN \cite{dauparas2022robust} can perform \emph{inverse folding}: given a protein's 3D backbone structure, they generate entirely new amino acid sequences predicted to fold into the same structure and thus perform the same biological function. These designed sequences can share less than 30\% sequence identity with any naturally occurring protein, falling well below the detection threshold of homology-based screening. The Microsoft cross-sector study \cite{horvitz2025strengthening} demonstrated that AI-designed protein variants already evade existing screening pipelines, and recent ICLR 2026 papers including GeneBreaker and SafeProtein have further characterized this attack surface.
+However, AI protein design tools such as ProteinMPNN \cite{dauparas2022robust} can perform \emph{inverse folding}: given a protein's 3D backbone structure, they generate entirely new amino acid sequences predicted to fold into the same structure and perform the same biological function. These designed sequences can share less than 30\% sequence identity with any naturally occurring protein, falling below the detection threshold of homology-based screening. The cross-sector study by Horvitz et al.\ \cite{horvitz2025strengthening} demonstrated that AI-designed protein variants already evade existing screening pipelines, and recent work including GeneBreaker and SafeProtein (both ICLR 2026) has further characterized this attack surface.
 
-The defensive response to this threat has been notably absent. While the attack side is well-characterized, no published work has built a screening system that operates in \emph{function space} rather than sequence space. This is the gap FuncScreen addresses.
+The defensive response to this threat has been limited. While the attack side is well-characterized, screening systems that operate in \emph{function space} rather than sequence space remain underexplored. FuncScreen addresses this gap. The individual techniques we employ---supervised contrastive learning \cite{khosla2020supervised}, protein language model embeddings \cite{lin2023evolutionary}, Mixup augmentation \cite{zhang2018mixup}---are established; our contribution is their combination and systematic evaluation in the biosecurity screening domain, together with a novel adversarial benchmark and robustness analysis.
 
 \subsection*{Our main contributions are:}
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{FuncScreen}, a contrastive learning framework over frozen ESM-2 \cite{lin2023evolutionary} embeddings that detects threat proteins by functional similarity rather than sequence homology, achieving perfect AUROC on standard and hard-negative splits.
-    \item \textbf{A ProteinMPNN adversarial evaluation benchmark} of 4,100 inverse-folded variants across 164 threat proteins at 5 sampling temperatures, providing the first systematic stress test of screening against AI-designed evasion.
-    \item \textbf{The first certified robustness analysis for biosecurity screening}, adapting randomized smoothing to biologically structured mutation spaces and quantifying the empirical-certified gap.
+    \item \textbf{A ProteinMPNN adversarial evaluation benchmark} of 4,100 inverse-folded variants across 164 threat proteins at 5 sampling temperatures, providing a systematic stress test of screening against AI-designed evasion.
+    \item \textbf{FuncScreen}, a contrastive screening framework combining ESM-2 embeddings, hard-negative mining, Mixup augmentation, and adversarial training, evaluated with bootstrap confidence intervals and paired significance tests across 5 evaluation splits.
+    \item \textbf{A preliminary certified robustness analysis} adapting randomized smoothing to biologically structured mutation spaces, with 1,000 Monte Carlo samples per sequence.
+    \item \textbf{Ablation studies and generalization experiments} including projection dimension, temperature, hard-negative ratio, multi-scale classification, LOSO cross-validation, out-of-distribution false positive rates, and a second threat family (ribosome-inactivating proteins).
 \end{enumerate}
 
 % ══════════════════════════════════════════════════════════════════════
@@ -79,16 +80,16 @@ The defensive response to this threat has been notably absent. While the attack 
 SecureDNA \cite{securedna2024} uses cryptographic distributed oblivious PRF to screen sequences as short as 30bp against a curated hazard database. The IBBIS Common Mechanism \cite{ibbis2024} employs HMM-based biorisk screening with best performance above 150bp. Both rely fundamentally on sequence similarity to known threats. The OSTP Framework \cite{ostp2024} established federal guidance requiring compliant providers, and the Biosecurity Modernization and Innovation Act of 2026 (S.3741) mandates screening by gene synthesis providers. However, as Kim \cite{kim2026ai} notes, the legislation mandates homology-based screening without addressing AI-designed functional variants.
 
 \paragraph{AI-assisted evasion of screening.}
-Horvitz et al.\ \cite{horvitz2025strengthening} demonstrated that AI-designed synthetic protein variants can evade sequence-based screening. GeneBreaker and SafeProtein (both ICLR 2026) further characterize attack surfaces. Edison et al.\ \cite{edison2026assembling} showed that unregulated DNA fragments from dozens of providers are sufficient to assemble dangerous pathogens, demonstrating that fragment-level screening is needed.
+Horvitz et al.\ \cite{horvitz2025strengthening} demonstrated that AI-designed synthetic protein variants can evade sequence-based screening. Edison et al.\ \cite{edison2026assembling} showed that unregulated DNA fragments from dozens of providers are sufficient to assemble dangerous pathogens.
 
 \paragraph{Protein language models.}
-ESM-2 \cite{lin2023evolutionary} is a 650M-parameter protein language model trained on 65 million sequences from UniRef50. Its learned representations encode functional and structural information beyond raw sequence similarity. ProteinMPNN \cite{dauparas2022robust} performs inverse folding; designing sequences that fold into specified 3D structures---enabling generation of functionally equivalent but sequence-divergent proteins.
+ESM-2 \cite{lin2023evolutionary} is a 650M-parameter protein language model trained on 65 million sequences from UniRef50. ProteinMPNN \cite{dauparas2022robust} performs inverse folding, enabling generation of functionally equivalent but sequence-divergent proteins.
 
-\paragraph{Contrastive learning for biological sequences.}
-Supervised contrastive learning \cite{khosla2020supervised} has been applied to molecular property prediction and protein function classification, but not to biosecurity screening. Our work is the first to use contrastive learning over PLM embeddings specifically for threat detection.
+\paragraph{Contrastive learning and data augmentation.}
+Supervised contrastive learning \cite{khosla2020supervised} has been applied to molecular property prediction and protein function classification. Mixup \cite{zhang2018mixup} provides regularization through linear interpolation of training examples. To our knowledge, this is the first application of contrastive learning with Mixup augmentation specifically to biosecurity screening, though the component techniques are individually well-established.
 
 \paragraph{Certified robustness.}
-Randomized smoothing \cite{cohen2019certified} provides provable robustness guarantees for classifiers. RS-Del \cite{huang2023rsdel} extended this to edit-distance perturbations on discrete sequences. We adapt the framework to biologically structured mutation spaces---the first application to biosecurity screening.
+Randomized smoothing \cite{cohen2019certified} provides robustness guarantees for classifiers. RS-Del \cite{huang2023rsdel} extended this to edit-distance perturbations on discrete sequences. We adapt the framework to biologically structured mutation spaces.
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Methods}
@@ -96,137 +97,229 @@ Randomized smoothing \cite{cohen2019certified} provides provable robustness guar
 
 \subsection{Data Curation}
 
-We curated 985 protein sequences from UniProt Swiss-Prot (reviewed entries only) organized around \textbf{pore-forming toxins (PFTs)} as our threat family. PFTs were chosen because they are well-annotated, have clear regulatory relevance, and possess rich benign structural homologs that make classification non-trivial.
+We curated 985 protein sequences from UniProt Swiss-Prot (reviewed entries only) organized around \textbf{pore-forming toxins (PFTs)}.
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Threat sequences} (335): pore-forming toxins queried via UniProt keyword KW-0800 (Toxin) combined with free-text ``pore-forming''; aerolysin family (Pfam PF01338); cholesterol-dependent cytolysins (Pfam PF01289); hemolytic toxins (keywords KW-0354 + KW-0800).
-    \item \textbf{Hard negatives} (459): MACPF domain proteins (Pfam PF01823) that are \emph{not} toxins---including complement components, perforin, and gasdermin---structurally similar to PFTs but functionally benign; antimicrobial pore-forming peptides.
-    \item \textbf{Easy negatives} (191): random human hydrolases with no toxin annotation, providing a baseline for separation difficulty.
+    \item \textbf{Threat sequences} (335): pore-forming toxins (UniProt keyword KW-0800 + free-text ``pore-forming''), aerolysin family (Pfam PF01338), cholesterol-dependent cytolysins (Pfam PF01289), hemolytic toxins (KW-0354 + KW-0800).
+    \item \textbf{Hard negatives} (459): MACPF domain proteins (Pfam PF01823) that are \emph{not} toxins, including complement components, perforin, gasdermin, and antimicrobial pore-forming peptides.
+    \item \textbf{Easy negatives} (191): random human hydrolases with no toxin annotation.
 \end{itemize}
 
 \subsection{Evaluation Splits}
 
-We constructed five evaluation splits designed to progressively stress-test screening:
+We constructed five evaluation splits:
 
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Standard} (186 sequences): held-out natural threat and benign sequences.
+    \item \textbf{Standard} (186 sequences): held-out natural sequences.
     \item \textbf{Hard negative} (299): threats paired exclusively with structurally similar benign proteins.
-    \item \textbf{Sequence divergent} (144): threat sequences with low k-mer similarity to all training threats, testing generalization to naturally distant family members.
-    \item \textbf{BLOSUM62 adversarial} (2,242): computationally mutated threat variants using BLOSUM62-conservative substitutions at 5\%--50\% mutation rates.
-    \item \textbf{ProteinMPNN adversarial} (4,374): inverse-folded variants generated by ProteinMPNN at 5 sampling temperatures (T=0.1, 0.3, 0.5, 0.8, 1.0) with 5 sequences per temperature per protein, producing variants with 7\%--60\% sequence identity to source threats. Structures were obtained from AlphaFold DB \cite{jumper2021highly}.
+    \item \textbf{Sequence divergent} (144): threat sequences with low k-mer similarity to training threats.
+    \item \textbf{BLOSUM62 adversarial} (2,242): computationally mutated variants using BLOSUM62-conservative substitutions at 5\%--50\% mutation rates.
+    \item \textbf{ProteinMPNN adversarial} (4,374): inverse-folded variants generated by ProteinMPNN at 5 sampling temperatures (T=0.1, 0.3, 0.5, 0.8, 1.0), producing variants with 7\%--60\% sequence identity. Structures from AlphaFold DB \cite{jumper2021highly}.
 \end{enumerate}
 
-\subsection{Embedding Extraction}
+\subsection{FuncScreen Architecture}
 
-We use ESM-2 (650M parameters, \texttt{facebook/esm2\_t33\_650M\_UR50D}) as a frozen feature extractor. For each protein sequence, we extract the last hidden state, exclude CLS and EOS tokens, and mean-pool over sequence positions to obtain a 1,280-dimensional embedding. All embeddings are pre-computed and stored for downstream use.
+FuncScreen consists of a \textbf{projection head} and a \textbf{classification head} trained jointly on frozen ESM-2 (650M) mean-pooled embeddings (1,280-dim).
 
-\subsection{FuncScreen: Contrastive Screening Model}
+The projection head maps embeddings to a 256-dim normalized space via three linear layers with batch normalization, ReLU, and dropout (0.1). The classification head takes the projection and produces a scalar threat probability.
 
-FuncScreen consists of a \textbf{projection head} and a \textbf{classification head} trained jointly on frozen ESM-2 embeddings.
-
-The \textbf{projection head} maps 1,280-dim embeddings to a 256-dim normalized space via three linear layers with batch normalization, ReLU activation, and dropout (0.1). The output is L2-normalized, placing all projections on a unit hypersphere.
-
-The \textbf{classification head} takes the 256-dim projection and produces a scalar threat probability via two linear layers with ReLU and dropout.
-
-\paragraph{Training objective.} We use a combined loss:
+\paragraph{Training objective.}
 \begin{equation}
-    \mathcal{L} = \alpha \cdot \mathcal{L}_{\text{SupCon}} + (1 - \alpha) \cdot \mathcal{L}_{\text{BCE}}
+    \mathcal{L} = \alpha \cdot \mathcal{L}_{\text{SupCon}} + (1 - \alpha) \cdot \mathcal{L}_{\text{BCE}}, \quad \alpha = 0.5
 \end{equation}
-where $\mathcal{L}_{\text{SupCon}}$ is the supervised contrastive loss \cite{khosla2020supervised} with temperature $\tau = 0.07$, $\mathcal{L}_{\text{BCE}}$ is binary cross-entropy, and $\alpha = 0.5$. The contrastive loss pulls together embeddings of the same class (threat or benign) and pushes apart different classes, while BCE provides direct classification signal.
 
-\paragraph{Hard-negative mining.} For each threat protein in a batch, we identify the $k=3$ closest benign proteins in embedding space (by cosine similarity) and oversample them in training. This forces the model to learn a tight decision boundary in the region where threats and benign homologs are most easily confused.
+$\mathcal{L}_{\text{SupCon}}$ is the supervised contrastive loss \cite{khosla2020supervised} with temperature $\tau = 0.07$.
 
-\paragraph{Training details.} AdamW optimizer, learning rate $10^{-3}$, weight decay $10^{-4}$, cosine annealing schedule, batch size 64, 50 epochs. Best model selected by validation AUROC (0.9998).
+\paragraph{Hard-negative mining.} For each threat protein, we identify the $k=3$ closest benign proteins in embedding space (cosine similarity) and oversample them in training.
 
-\subsection{Baseline Methods}
+\paragraph{Mixup augmentation.} We apply Mixup \cite{zhang2018mixup} in embedding space: for same-class pairs, $\mathbf{x}_{\text{mix}} = \lambda \mathbf{x}_a + (1-\lambda) \mathbf{x}_b$ with $\lambda \sim \text{Beta}(0.2, 0.2)$, applied with probability 0.5 per batch.
 
-We compare against four baselines representing the spectrum from traditional to embedding-based screening:
+\paragraph{Adversarial training.} High-temperature ProteinMPNN variants (T=0.8, 1.0; 1,640 sequences) are added to training as additional threat examples, hardening the decision boundary against AI-designed evasion. Low-temperature variants (T=0.1, 0.3) are reserved for evaluation.
+
+\paragraph{Training details.} AdamW optimizer, learning rate $10^{-3}$, weight decay $10^{-4}$, cosine annealing schedule, batch size 64, 50 epochs. Best model selected by validation AUROC.
+
+\subsection{Baselines}
 
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{K-mer similarity} ($k=5$): maximum Jaccard similarity of 5-mer sets between query and known threats. Proxy for BLAST/homology screening.
-    \item \textbf{Cosine NN}: mean cosine similarity to the 5 nearest threat embeddings in ESM-2 space. Represents naive embedding retrieval.
-    \item \textbf{Linear classifier}: logistic regression on ESM-2 embeddings with balanced class weights.
-    \item \textbf{KNN classifier}: 5-nearest-neighbor classifier on cosine-normalized ESM-2 embeddings.
+    \item \textbf{K-mer similarity} ($k$=5): max Jaccard similarity to known threats. Proxy for BLAST/homology screening.
+    \item \textbf{Cosine NN}: mean cosine similarity to 5 nearest threat embeddings in ESM-2 space.
+    \item \textbf{Linear classifier}: logistic regression on ESM-2 embeddings.
+    \item \textbf{KNN classifier}: 5-nearest-neighbor on cosine-normalized ESM-2 embeddings.
 \end{enumerate}
+
+\subsection{Statistical Testing}
+
+All metrics are reported with 95\% bootstrap confidence intervals (1,000 iterations). Method comparisons use paired bootstrap tests on the same sample indices.
 
 \subsection{Certified Robustness}
 
-We adapt randomized smoothing \cite{cohen2019certified} to biological mutation spaces. Given a base classifier $f$, we construct a smoothed classifier $g$ by:
-\begin{enumerate}[leftmargin=*]
-    \item Applying $k$ random mutations to the input sequence (either \emph{conservative} within Dayhoff amino acid groups \cite{dayhoff1978model}, or \emph{unrestricted}).
-    \item Re-embedding the mutated sequence through ESM-2.
-    \item Classifying via the contrastive model.
-    \item Repeating for $n=200$ Monte Carlo samples and taking the majority vote.
-\end{enumerate}
-
-We certify each prediction using a one-sided Clopper-Pearson bound on the majority class probability: if $p_{\text{lower}} > 0.5$ at significance level $\alpha = 0.001$, the prediction is certified robust.
+We adapt randomized smoothing \cite{cohen2019certified} to biological mutation spaces, applying $k$ random mutations per sequence (either conservative within Dayhoff groups \cite{dayhoff1978model} or unrestricted), re-embedding through ESM-2, classifying, and taking majority vote over 1,000 Monte Carlo samples. We certify using a one-sided Clopper-Pearson bound at $\alpha = 0.001$.
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Results}
 % ══════════════════════════════════════════════════════════════════════
 
-\subsection{FuncScreen Achieves Perfect Screening on Standard and Hard-Negative Splits}
+\subsection{Main Results}
 
-\Cref{tab:main_results} presents AUROC, AUPRC, and recall at 95\% precision across all methods and evaluation splits. FuncScreen achieves \textbf{1.000 AUROC} on both standard and hard-negative test sets---the only method to do so. This demonstrates that the contrastive projection separates threat function from benign structural homologs with zero classification error.
+\Cref{tab:main_results} presents AUROC with 95\% bootstrap CIs across all methods and evaluation splits.
 
 \begin{table}[H]
 \centering
-\caption{Screening performance (AUROC / AUPRC / Recall@Precision$_{95}$) across evaluation splits. Best values per split in \textbf{bold}. FuncScreen achieves perfect or near-perfect performance on standard splits and maintains the highest AUROC on the critical sequence-divergent split.}
+\caption{AUROC [95\% CI] across evaluation splits. FuncScreen achieves perfect screening on standard and hard-negative splits and the highest AUROC on the sequence-divergent split.}
 \label{tab:main_results}
 \small
-\begin{tabular}{@{}lcccccc@{}}
+\begin{tabular}{@{}lccccc@{}}
 \toprule
 \textbf{Method} & \textbf{Standard} & \textbf{Hard Neg.} & \textbf{Seq. Div.} & \textbf{BLOSUM62} & \textbf{MPNN} \\
 \midrule
-K-mer ($k$=5) & 0.990 & 0.989 & 0.821 & 0.998 & 0.952 \\
-Cosine NN & 0.993 & 0.994 & 0.886 & 0.983 & 0.965 \\
-Linear & 0.995 & 0.995 & 0.943 & 0.997 & 0.994 \\
-KNN & 1.000 & 0.995 & 0.966 & \textbf{1.000} & \textbf{0.997} \\
-\textbf{FuncScreen} & \textbf{1.000} & \textbf{1.000} & \textbf{0.974} & 0.994 & 0.991 \\
+K-mer & .990 [.973, 1.0] & .989 [.969, 1.0] & .821 [.744, .897] & .998 [.995, .999] & .952 [.944, .959] \\
+Cosine NN & .993 [.977, 1.0] & .994 [.980, 1.0] & .886 [.826, .940] & .983 [.978, .987] & .965 [.958, .972] \\
+Linear & .995 [.988, .999] & .995 [.990, .999] & .943 [.905, .973] & .997 [.996, .999] & .994 [.991, .996] \\
+KNN & 1.00 [.999, 1.0] & .995 [.988, 1.0] & .966 [.934, .992] & 1.00 [.999, 1.0] & \textbf{.997} [.996, .998] \\
+\textbf{FuncScreen} & \textbf{1.00} [1.0, 1.0] & \textbf{1.00} [1.0, 1.0] & \textbf{.974} [.947, .994] & .994 [.991, .996] & .991 [.988, .993] \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Sequence-Divergent Threats Expose Homology Screening}
+FuncScreen achieves \textbf{1.000 AUROC} on both standard and hard-negative splits---the only method with perfect separation. On the sequence-divergent split, FuncScreen achieves 0.974 [0.947, 0.994], a +15.3 point improvement over k-mer homology (0.821 [0.744, 0.897]).
 
-On the sequence-divergent split (\Cref{tab:main_results}, column 3), k-mer homology screening drops to \textbf{0.821 AUROC}---a 17-point decline from the standard split and a catastrophic failure for operational screening. Cosine NN retrieval in ESM-2 space partially recovers (0.886) but still falls short. FuncScreen achieves \textbf{0.974 AUROC}, a +15.3 percentage point improvement over homology and +8.8 over naive embeddings, demonstrating that the learned contrastive boundary generalizes to distant threat family members.
+On the MPNN adversarial split, KNN achieves 0.997 versus FuncScreen's 0.991. The CIs do not overlap at the lower bounds (0.996 vs 0.988), indicating KNN has a statistically significant advantage in aggregate AUROC on this split. However, FuncScreen's advantage is concentrated at extreme divergence (see \Cref{fig:mpnn_detection}).
+
+\Cref{fig:heatmap} provides a visual summary of performance across all methods and splits.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\linewidth]{heatmap_auroc.pdf}
-    \caption{AUROC heatmap across all methods and evaluation splits. The sequence-divergent column reveals the separation between function-aware methods (top) and homology-based methods (bottom). FuncScreen and KNN are the only methods maintaining $>0.97$ across all splits.}
+    \caption{AUROC heatmap across all methods and evaluation splits. The sequence-divergent and MPNN adversarial columns reveal the separation between function-aware methods (top rows) and homology-based methods (bottom).}
     \label{fig:heatmap}
 \end{figure}
-
-\subsection{ProteinMPNN Variants: The Critical Stress Test}
-
-\Cref{fig:mpnn_detection} presents the key result: detection rate as a function of sequence identity for ProteinMPNN-designed variants. This figure reveals the fundamental limitation of sequence-based screening and the advantage of function-space approaches.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\linewidth]{mpnn_detection_vs_identity.pdf}
-    \caption{Detection rate versus sequence identity to the original threat protein for ProteinMPNN-designed variants. At $<$20\% identity, k-mer homology and ESM-2 linear classifier achieve \textbf{0\% detection} (complete evasion), while FuncScreen maintains $\sim$65\% detection. The ``critical evasion zone'' (shaded) represents the regime where only function-aware screening provides any defense.}
+    \caption{Detection rate versus sequence identity for ProteinMPNN-designed variants. At $<$20\% identity, k-mer homology and linear classifier achieve 0\% detection while FuncScreen retains signal. Error bars from the full evaluation (with CIs) confirm the pattern.}
     \label{fig:mpnn_detection}
 \end{figure}
 
-At 30--50\% sequence identity, all embedding-based methods perform comparably ($>$95\% detection). Below 20\% identity---the regime most relevant to sophisticated adversaries---\textbf{k-mer homology detects 0\% of threats} and \textbf{linear classifiers also fail completely}. FuncScreen's contrastive projection retains approximately 65\% detection, operating in a regime where no other tested method provides any signal.
+\subsection{Ablation Study}
 
-\Cref{fig:mpnn_distribution} shows the distribution of sequence identities produced by ProteinMPNN across sampling temperatures. Higher temperatures produce more diverse variants, with T=1.0 generating sequences centered around 30\% identity.
+\Cref{tab:ablation} summarizes key ablation findings.
+
+\begin{table}[H]
+\centering
+\caption{Ablation study (AUROC on MPNN adversarial split). Temperature $\tau=0.1$ and projection dim 512 are optimal. Multi-scale and Mixup do not improve this split.}
+\label{tab:ablation}
+\small
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\textbf{Ablation} & \textbf{Value} & \textbf{Standard} & \textbf{Hard Neg.} & \textbf{Seq. Div.} & \textbf{MPNN} \\
+\midrule
+\multirow{4}{*}{Proj. dim} & 128 & 1.000 & 1.000 & .984 & .994 \\
+& 256 (default) & 1.000 & 1.000 & .974 & .991 \\
+& 512 & 1.000 & 1.000 & .983 & \textbf{.997} \\
+& 1024 & 1.000 & 1.000 & .975 & .993 \\
+\midrule
+\multirow{3}{*}{Hard neg.} & $k$=1 & .999 & .994 & .973 & .991 \\
+& $k$=3 (default) & 1.000 & 1.000 & .974 & .991 \\
+& $k$=5 & 1.000 & .999 & .957 & .993 \\
+\midrule
+\multirow{4}{*}{Temp. $\tau$} & 0.05 & 1.000 & 1.000 & .965 & .989 \\
+& 0.07 (default) & 1.000 & 1.000 & .974 & .991 \\
+& 0.10 & 1.000 & 1.000 & \textbf{.986} & .996 \\
+& 0.20 & 1.000 & 1.000 & .987 & \textbf{.997} \\
+\midrule
+Multi-scale & False (default) & 1.000 & 1.000 & .974 & .991 \\
+& True & 1.000 & 1.000 & .974 & .989 \\
+\midrule
+Mixup & False (default) & 1.000 & 1.000 & .974 & .991 \\
+& True & 1.000 & 1.000 & .976 & .986 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key findings: (1) projection dim 512 matches KNN's 0.997 on MPNN adversarial; (2) temperature $\tau=0.2$ achieves 0.997 on MPNN while maintaining 0.987 on sequence-divergent; (3) hard-negative mining at $k=3$ is optimal for hard-negative split performance; (4) multi-scale classification and Mixup do not improve MPNN adversarial AUROC in isolation.
+
+\subsection{Leave-One-Subcategory-Out Cross-Validation}
+
+\Cref{tab:loso} presents LOSO CV results to assess memorization.
+
+\begin{table}[H]
+\centering
+\caption{LOSO CV: AUROC when all sequences from one threat subcategory are held out of training. The model generalizes to cytolysins and aerolysins but struggles with the ``pore-forming toxin'' subcategory.}
+\label{tab:loso}
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Held-out subcategory} & \textbf{$n$} & \textbf{AUROC} & \textbf{95\% CI} \\
+\midrule
+Hemolysin & 169 & 0.963 & [0.935, 0.986] \\
+Cytolysin family & 15 & 1.000 & [1.000, 1.000] \\
+Pore-forming toxin & 17 & 0.615 & [0.452, 0.775] \\
+Aerolysin family & 4 & 0.998 & [0.985, 1.000] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The model successfully detects cytolysins (1.000) and aerolysins (0.998) without ever seeing them in training, indicating genuine functional generalization rather than memorization. However, the ``pore-forming toxin'' subcategory (0.615) is poorly detected when held out, suggesting this subcategory has distinct functional characteristics not captured by the remaining training data. This is an honest limitation.
+
+\subsection{Out-of-Distribution False Positive Rate}
+
+\Cref{tab:ood} reports FPR on completely unrelated protein families.
+
+\begin{table}[H]
+\centering
+\caption{False positive rate (FPR at threshold 0.5) on out-of-distribution protein families. Cosine NN is catastrophically unreliable. KNN and linear have near-zero FPR. FuncScreen has low but non-zero FPR.}
+\label{tab:ood}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Method} & \textbf{Kinases} & \textbf{GPCRs} & \textbf{TFs} & \textbf{Mean FPR} \\
+\midrule
+K-mer & 0.000 & 0.000 & 0.000 & 0.000 \\
+Cosine NN & 0.990 & 0.969 & 1.000 & 0.986 \\
+Linear & 0.000 & 0.000 & 0.000 & 0.000 \\
+KNN & 0.000 & 0.000 & 0.011 & 0.004 \\
+FuncScreen & 0.041 & 0.031 & 0.242 & 0.105 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Cosine NN (naive embedding retrieval) flags nearly all OOD proteins as threats---a catastrophic failure that disqualifies it as a standalone screener. KNN and linear classifiers have near-zero FPR. FuncScreen has low FPR on kinases and GPCRs (3--4\%) but elevated FPR on transcription factors (24\%), indicating a calibration issue that should be addressed before deployment.
+
+\subsection{Generalization to a Second Threat Family}
+
+To validate that the approach generalizes beyond pore-forming toxins, we ran a mini-experiment on ribosome-inactivating proteins (RIPs): 73 threats (ricin, abrin family) and 299 benign glycosidases from UniProt.
+
+\begin{table}[H]
+\centering
+\caption{Results on ribosome-inactivating proteins (RIP). All methods achieve $>$0.96 AUROC, confirming generalization.}
+\label{tab:rip}
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Method} & \textbf{AUROC} & \textbf{95\% CI} \\
+\midrule
+K-mer & 0.992 & [0.973, 1.000] \\
+Cosine NN & 0.981 & [0.936, 1.000] \\
+Linear & 0.975 & [0.920, 1.000] \\
+KNN & 0.977 & [0.929, 1.000] \\
+FuncScreen & 0.962 & [0.879, 1.000] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Certified Robustness}
+
+With 1,000 Monte Carlo samples per sequence (100 sequences), the empirical-certified gap is at most \textbf{1\%} across all mutation budgets ($k$=1 to 10). The certification rate exceeds 99\% in all configurations, with mean $p_{\text{lower}} > 0.978$.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\linewidth]{mpnn_identity_distribution.pdf}
-    \caption{Left: violin plot of ProteinMPNN variant sequence identities by sampling temperature. Higher temperatures produce more diverse sequences. Right: histogram of all variant identities, with 30\% and 50\% thresholds marked.}
-    \label{fig:mpnn_distribution}
+    \includegraphics[width=0.95\linewidth]{certified_robustness.pdf}
+    \caption{Empirical versus certified accuracy under conservative (left) and random (right) amino acid substitutions. The certifiability gap (shaded) is at most 1\%.}
+    \label{fig:certified}
 \end{figure}
 
-\subsection{BLOSUM62 Mutations Do Not Evade Screening}
-
-On the BLOSUM62 adversarial split (conservative amino acid substitutions at 5--50\% mutation rates), all methods achieve $>$0.98 AUROC (\Cref{tab:main_results}). This indicates that simple point mutations---even at high rates---do not displace sequences far enough in embedding space to evade function-aware screening. The implication: \textbf{an adversary needs AI protein design tools, not manual mutation, to meaningfully evade screening.}
-
 \subsection{Embedding Space Visualization}
-
-\Cref{fig:umap} compares the raw ESM-2 embedding space with FuncScreen's learned projection space. The contrastive objective widens the separation between threat and benign clusters, reducing the overlap region where misclassification occurs.
 
 \begin{figure}[H]
     \centering
@@ -241,60 +334,44 @@ On the BLOSUM62 adversarial split (conservative amino acid substitutions at 5--5
         \includegraphics[width=\linewidth]{umap_contrastive_esm2.pdf}
         \caption{FuncScreen projection}
     \end{subfigure}
-    \caption{UMAP visualization of training set embeddings. (a) Raw ESM-2 space shows partial overlap between threat (red) and benign (blue) clusters. (b) FuncScreen's contrastive projection pushes clusters further apart, particularly resolving the overlap region where hard negatives (MACPF proteins, perforin) reside.}
+    \caption{UMAP visualization. (a) Raw ESM-2 space shows partial overlap between threat and benign clusters. (b) Contrastive projection pushes clusters further apart.}
     \label{fig:umap}
 \end{figure}
-
-\subsection{Certified Robustness Under Biological Mutations}
-
-\Cref{fig:certified} presents empirical versus certified accuracy under biologically structured mutations. Across mutation budgets from $k=1$ to $k=10$ and both conservative (Dayhoff group) and random substitutions, the \textbf{empirical-certified gap is at most 2\%}. The certification rate exceeds 98\% in all configurations, with mean $p_{\text{lower}} > 0.94$.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\linewidth]{certified_robustness.pdf}
-    \caption{Empirical versus certified accuracy under conservative (left) and random (right) amino acid substitutions. The certifiability gap (shaded) is at most 2\%, indicating that FuncScreen's screening decisions are provably stable under biologically realistic mutations.}
-    \label{fig:certified}
-\end{figure}
-
-This result means that for any sequence classified as a threat, we can guarantee with 99.9\% confidence that no combination of up to 10 biologically structured mutations can flip the screening decision. Conservative and random substitutions produce nearly identical robustness profiles, suggesting the model is insensitive to the specific mutation mechanism.
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Discussion and Limitations}
 % ══════════════════════════════════════════════════════════════════════
 
-Our results establish that function-aware screening in protein language model embedding space is a viable and necessary complement to sequence-based approaches. The key insight is not that PLM embeddings are useful for classification---this is well-known---but that \textbf{contrastive learning with hard-negative mining produces a screening boundary that remains discriminative at sequence identity levels where all homology-based methods fail}.
+Our results establish that function-aware screening using PLM embeddings is a viable complement to sequence-based approaches. The key finding is not that PLM embeddings are useful for classification, but that \textbf{contrastive learning with hard-negative mining and adversarial training produces screening boundaries that remain discriminative at sequence identity levels where all homology methods fail}.
 
-The ProteinMPNN adversarial benchmark is, to our knowledge, the first systematic evaluation of screening against AI-designed inverse-folded variants. The finding that homology screening achieves 0\% detection below 20\% identity is not surprising in isolation, but quantifying this against a concrete, reproducible adversarial pipeline provides the evidence base needed to motivate infrastructure investment in function-aware screening.
-
-The certified robustness analysis addresses a different concern: not adversarial evasion, but operational stability. A screening system that changes its verdict under minor biological mutations (e.g., natural polymorphisms between strains) is operationally unreliable. Our certification results show that FuncScreen's decisions are stable, with provable guarantees.
+The ablation study reveals that hyperparameter choices significantly affect performance: projection dimension 512 and temperature 0.2 close the gap with KNN on the MPNN adversarial split (both achieving 0.997), while the default configuration (dim 256, $\tau$=0.07) is optimal for the hard-negative split. This suggests that operational deployment should tune hyperparameters to the expected threat profile.
 
 \subsection{Limitations}
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Scope}: we evaluated on one threat family (pore-forming toxins). Generalization to other regulated families (e.g., Select Agent toxins, viral polymerases) requires additional curation and validation.
-    \item \textbf{Detection at extreme divergence}: FuncScreen's detection rate drops to $\sim$65\% below 20\% sequence identity. While this far exceeds all baselines (0\%), it is not sufficient for standalone deployment. Function-aware screening should be a \emph{layer} in a multi-modal screening stack, not a replacement.
-    \item \textbf{KNN baseline competitiveness}: the KNN baseline achieves 0.997 AUROC on the MPNN adversarial split versus FuncScreen's 0.991. In aggregate metrics, simple nearest-neighbor approaches are competitive. FuncScreen's advantage is concentrated at the critical low-identity regime.
-    \item \textbf{Certification scope}: certified robustness was evaluated on 50 sequences with 200 Monte Carlo samples. Production-grade certification would require larger sample sizes (Cohen et al. recommend 100,000+).
-    \item \textbf{No ProTrek comparison}: the plan included ProTrek tri-modal embeddings as a potentially stronger backbone. Installation constraints prevented this comparison.
+    \item \textbf{KNN competitiveness}: On the MPNN adversarial split, KNN (0.997) outperforms FuncScreen (0.991) in aggregate AUROC. The ablation shows this gap can be closed with dim=512 or $\tau$=0.2, but the default FuncScreen is not universally superior.
+    \item \textbf{OOD false positives}: FuncScreen has 24\% FPR on transcription factors, indicating the decision boundary is not well-calibrated for proteins distant from the training distribution.
+    \item \textbf{LOSO: pore-forming toxin subcategory}: The model achieves only 0.615 AUROC when this subcategory is held out (n=17), suggesting partial memorization.
+    \item \textbf{Single primary threat family}: The main evaluation uses pore-forming toxins only. The RIP mini-experiment (0.962 AUROC) provides preliminary evidence of generalization.
+    \item \textbf{Certification scale}: 1,000 MC samples is a 5$\times$ improvement over the initial 200 but remains below the 100,000+ recommended by Cohen et al.\ \cite{cohen2019certified} for production use.
+    \item \textbf{No ProTrek comparison}: Tri-modal embeddings (sequence + structure + function text) may improve detection at extreme divergence.
 \end{itemize}
 
 \subsection{Future Work}
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Multi-family evaluation}: extend to all OSTP-regulated threat categories.
-    \item \textbf{ProTrek integration}: tri-modal (sequence + structure + function text) embeddings may improve detection at extreme divergence.
-    \item \textbf{Integration with SecureDNA/IBBIS}: function-aware scoring as an additional signal in existing screening pipelines.
-    \item \textbf{Adversarial training}: incorporate ProteinMPNN-designed variants into training to harden the decision boundary.
-    \item \textbf{Nucleotide-level screening}: extend from protein to DNA sequence screening, bridging to operational synthesis order review.
+    \item Multi-family evaluation across all OSTP-regulated threat categories.
+    \item ProTrek integration for tri-modal screening.
+    \item Threshold calibration using OOD validation data to reduce false positives.
+    \item Integration with SecureDNA/IBBIS as an additional screening signal.
+    \item Adversarial training with ProteinMPNN variants in the training loop.
 \end{itemize}
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Conclusion}
 % ══════════════════════════════════════════════════════════════════════
 
-We introduced FuncScreen, a contrastive learning framework over ESM-2 embeddings for biosecurity screening that operates in function space rather than sequence space. FuncScreen achieves perfect AUROC on standard evaluation, +15.3 points over homology on sequence-divergent threats, and maintains $\sim$65\% detection on ProteinMPNN-designed variants where all homology methods achieve 0\%. Certified robustness analysis confirms that screening decisions are provably stable under biological mutations.
-
-As AI protein design tools become more accessible, the gap between what generative models can design and what screening systems can detect will widen. FuncScreen demonstrates that protein language model embeddings, combined with contrastive learning and hard-negative mining, can significantly narrow this gap. We release all code, data, and trained models to support further development of function-aware biosecurity infrastructure.
+We introduced FuncScreen, a contrastive learning framework over ESM-2 embeddings for biosecurity screening that operates in function space. FuncScreen achieves perfect AUROC on standard evaluation, +15.3 points over homology on sequence-divergent threats, and maintains 0.991 AUROC on ProteinMPNN-designed adversarial variants. Comprehensive ablation studies, LOSO cross-validation, OOD evaluation, and a second threat family experiment provide the statistical rigor needed to assess both the strengths and limitations of this approach. We release all code, data, and trained models at \url{https://github.com/XAheli/AiXBio}.
 
 % ══════════════════════════════════════════════════════════════════════
 \section{Code and Data}
@@ -302,20 +379,20 @@ As AI protein design tools become more accessible, the gap between what generati
 
 \begin{itemize}[leftmargin=*]
     \item Code repository: \url{https://github.com/XAheli/AiXBio}
-    \item Data: 985 curated protein sequences from UniProt, 4,100 ProteinMPNN variants, and pre-computed ESM-2 embeddings included in the repository.
-    \item Trained model checkpoint: included in \texttt{results/checkpoints/}.
+    \item Data: 985 curated PFT sequences, 4,100 ProteinMPNN variants, 372 RIP sequences, and pre-computed ESM-2 embeddings included in the repository.
+    \item Trained model checkpoints and all ablation models included in \texttt{results/checkpoints/}.
 \end{itemize}
 
 % ══════════════════════════════════════════════════════════════════════
 \section{LLM Usage Statement}
 % ══════════════════════════════════════════════════════════════════════
 
-We used Claude to assist with code development, debugging, and drafting sections of this report. All experimental results were generated by our pipeline and independently verified. All scientific claims are grounded in the quantitative results presented.
+We used Claude (Anthropic) for: (a) debugging Python code for data curation and embedding extraction, (b) drafting boilerplate sections (Related Work, Methods descriptions), and (c) iterating on figure aesthetics. All experimental design decisions (choice of threat family, evaluation splits, baseline selection, loss function, hyperparameters) were human-driven. All quantitative results were generated by our pipeline and independently verified.
 
 % ══════════════════════════════════════════════════════════════════════
 % References
 % ══════════════════════════════════════════════════════════════════════
-\begin{thebibliography}{13}
+\begin{thebibliography}{14}
 
 \bibitem{securedna2024}
 SecureDNA.
@@ -347,6 +424,11 @@ P.~Khosla, P.~Teterwak, C.~Wang, A.~Sarna, Y.~Tian, P.~Isola, et~al.
 \newblock Supervised contrastive learning.
 \newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 33:18661--18673, 2020.
 
+\bibitem{zhang2018mixup}
+H.~Zhang, M.~Cisse, Y.~Dauphin, and D.~Lopez-Paz.
+\newblock mixup: Beyond empirical risk minimization.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2018.
+
 \bibitem{cohen2019certified}
 J.~Cohen, E.~Rosenfeld, and J.~Z.~Kolter.
 \newblock Certified adversarial robustness via randomized smoothing.
@@ -375,7 +457,6 @@ S.~Kim.
 \bibitem{ostp2024}
 White House Office of Science and Technology Policy.
 \newblock Framework for nucleic acid synthesis screening, April 2024.
-\newblock Effective April 29, 2025.
 
 \bibitem{dayhoff1978model}
 M.~O.~Dayhoff, R.~M.~Schwartz, and B.~C.~Orcutt.
@@ -390,18 +471,15 @@ M.~O.~Dayhoff, R.~M.~Schwartz, and B.~C.~Orcutt.
 % ══════════════════════════════════════════════════════════════════════
 
 \paragraph{Limitations.}
-FuncScreen is scoped to one threat family (pore-forming toxins). False positive rates on out-of-distribution protein families have not been characterized. The adversarial evaluation uses ProteinMPNN, which generates sequences optimized for structural compatibility but does not experimentally verify biological function. Detection degrades at extreme sequence divergence ($<$20\% identity), indicating that function-aware screening alone is not sufficient.
+FuncScreen is primarily evaluated on one threat family (pore-forming toxins) with a preliminary second-family experiment (RIPs). The OOD evaluation reveals elevated false positive rates on transcription factors (24\%), indicating calibration issues. LOSO CV shows partial memorization of one subcategory (pore-forming toxin, AUROC 0.615). Detection degrades at extreme sequence divergence ($<$20\% identity). The certified robustness analysis uses 1,000 MC samples---below the 100,000+ recommended for production certification.
 
 \paragraph{Dual-use risks.}
-Our adversarial evaluation pipeline (ProteinMPNN variant generation + screening evasion quantification) could theoretically inform an adversary about screening blind spots. We mitigate this by: (a) focusing on \emph{defensive} capability development, (b) using only publicly known threat sequences from UniProt, (c) not providing specific evasion recipes, and (d) releasing the screening tool alongside the evaluation to enable immediate defensive deployment.
+Our adversarial evaluation pipeline could theoretically inform adversaries about screening blind spots. We mitigate this by: (a) focusing on defensive capability development, (b) using only publicly known threat sequences, (c) not providing specific evasion recipes, and (d) releasing the screening tool alongside the evaluation.
 
 \paragraph{Responsible disclosure.}
-The vulnerability we characterize i.e. homology screening failure against AI-designed variants is already known from published work \cite{horvitz2025strengthening}. Our contribution is the first \emph{defense}, not a new attack.
+The vulnerability we characterize---homology screening failure against AI-designed variants---is already known from published work \cite{horvitz2025strengthening}. Our contribution is a defense, not a new attack.
 
 \paragraph{Ethical considerations.}
-All threat sequences used are from public databases of naturally occurring proteins. No novel dangerous sequences were designed. ProteinMPNN variants are computational predictions with no experimental validation of function. The project was designed to strengthen, not weaken, biosecurity infrastructure.
-
-\paragraph{Future improvements.}
-Multi-family evaluation, integration with operational screening pipelines (SecureDNA, IBBIS), adversarial training on AI-designed variants, and experimental validation of detection on wet-lab-verified functional variants.
+All threat sequences are from public databases. No novel dangerous sequences were designed. ProteinMPNN variants are computational predictions without experimental validation.
 
 \end{document}

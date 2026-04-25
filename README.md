@@ -17,18 +17,20 @@
   <img src="results/figures/mpnn_detection_vs_identity.png" width="85%" alt="Detection rate vs sequence identity"/>
 </p>
 
-<p align="center"><em>At &lt;20% sequence identity, homology screening achieves <b>0% detection</b>. FuncScreen maintains <b>~65% detection</b>.</em></p>
+<p align="center"><em>At &lt;20% sequence identity, homology screening achieves <b>0% detection</b>. FuncScreen maintains detection signal in this critical regime.</em></p>
 
 AI protein design tools (ProteinMPNN) generate functional threat variants with as low as **7% sequence identity** to known threats. Current screening infrastructure — SecureDNA, IBBIS Common Mechanism — relies on sequence homology and **completely misses these variants**.
 
 ## Key Results
 
-| Evaluation Split | K-mer (Homology) | ESM-2 Cosine NN | ESM-2 Linear | **Contrastive (Ours)** |
-|---|---|---|---|---|
-| Standard | 0.990 | 0.993 | 0.995 | **1.000** |
-| Hard Negative | 0.989 | 0.994 | 0.995 | **1.000** |
-| Sequence Divergent | 0.821 | 0.886 | 0.943 | **0.974** |
-| MPNN Adversarial | 0.952 | 0.965 | 0.994 | **0.991** |
+All metrics reported with **95% bootstrap confidence intervals** (1,000 iterations).
+
+| Evaluation Split | K-mer (Homology) | ESM-2 Cosine NN | ESM-2 Linear | KNN | **FuncScreen** |
+|---|---|---|---|---|---|
+| Standard | .990 [.973, 1.0] | .993 [.977, 1.0] | .995 [.988, .999] | 1.00 [.999, 1.0] | **1.00** [1.0, 1.0] |
+| Hard Negative | .989 [.969, 1.0] | .994 [.980, 1.0] | .995 [.990, .999] | .995 [.988, 1.0] | **1.00** [1.0, 1.0] |
+| Seq. Divergent | .821 [.744, .897] | .886 [.826, .940] | .943 [.905, .973] | .966 [.934, .992] | **.974** [.947, .994] |
+| MPNN Adversarial | .952 [.944, .959] | .965 [.958, .972] | .994 [.991, .996] | **.997** [.996, .998] | .991 [.988, .993] |
 
 <details>
 <summary><b>AUROC Heatmap (all methods x all splits)</b></summary>
@@ -44,6 +46,57 @@ AI protein design tools (ProteinMPNN) generate functional threat variants with a
 </p>
 </details>
 
+## Ablation Study
+
+| Ablation | Best Config | MPNN AUROC | Seq. Div. AUROC |
+|---|---|---|---|
+| Projection dim | 512 | **.997** | .983 |
+| Temperature | 0.2 | **.997** | **.987** |
+| Hard neg. ratio | k=3 (default) | .991 | .974 |
+| Multi-scale | No improvement | .989 | .974 |
+| Mixup | No improvement | .986 | .976 |
+
+Temperature 0.2 and projection dim 512 close the gap with KNN on MPNN adversarial while maintaining strong sequence-divergent performance.
+
+## Generalization
+
+<details>
+<summary><b>Leave-One-Subcategory-Out Cross-Validation</b></summary>
+
+| Held-out Subcategory | n | AUROC | 95% CI |
+|---|---|---|---|
+| Hemolysin | 169 | 0.963 | [0.935, 0.986] |
+| Cytolysin family | 15 | 1.000 | [1.000, 1.000] |
+| Pore-forming toxin | 17 | 0.615 | [0.452, 0.775] |
+| Aerolysin family | 4 | 0.998 | [0.985, 1.000] |
+
+Model generalizes to cytolysins and aerolysins without seeing them in training. Pore-forming toxin subcategory (0.615) is an honest limitation.
+</details>
+
+<details>
+<summary><b>Second Threat Family: Ribosome-Inactivating Proteins</b></summary>
+
+| Method | AUROC | 95% CI |
+|---|---|---|
+| K-mer | 0.992 | [0.973, 1.000] |
+| FuncScreen | 0.962 | [0.879, 1.000] |
+
+FuncScreen generalizes to a completely different threat family (ricin, abrin) with >0.96 AUROC.
+</details>
+
+<details>
+<summary><b>Out-of-Distribution False Positive Rates</b></summary>
+
+| Method | Kinases | GPCRs | Transcription Factors |
+|---|---|---|---|
+| K-mer | 0.000 | 0.000 | 0.000 |
+| Cosine NN | **0.990** | **0.969** | **1.000** |
+| KNN | 0.000 | 0.000 | 0.011 |
+| FuncScreen | 0.041 | 0.031 | 0.242 |
+
+Cosine NN is catastrophically unreliable on OOD proteins. FuncScreen has low FPR on kinases/GPCRs but elevated FPR on transcription factors — a calibration issue for future work.
+</details>
+
 ## Method
 
 <p align="center">
@@ -52,18 +105,27 @@ AI protein design tools (ProteinMPNN) generate functional threat variants with a
 </p>
 <p align="center"><em>Left: Raw ESM-2 embeddings (overlapping clusters). Right: After contrastive learning (clean separation).</em></p>
 
-1. **Data curation**: 985 proteins from UniProt Swiss-Prot (335 pore-forming toxins + 650 benign homologs including MACPF domain proteins, perforin, complement components)
+1. **Data curation**: 985 proteins from UniProt Swiss-Prot (335 pore-forming toxins + 650 benign homologs)
 2. **Embedding extraction**: Frozen ESM-2 (650M) mean-pooled representations (1280-dim)
-3. **Contrastive learning**: Supervised contrastive loss + BCE with hard-negative mining over threat/benign protein pairs
-4. **Adversarial stress testing**: 4,100 ProteinMPNN-designed variants at 5 sampling temperatures (T=0.1 to T=1.0), producing variants with 7-60% sequence identity to source threats
-5. **Certified robustness**: Randomized smoothing adapted to biological mutation spaces (conservative and random amino acid substitutions)
+3. **Contrastive learning**: Supervised contrastive loss + BCE with hard-negative mining
+4. **Mixup augmentation**: Embedding-space interpolation for small-dataset regularization
+5. **Adversarial training**: High-temperature ProteinMPNN variants (T=0.8, 1.0) added to training
+6. **Adversarial stress testing**: 4,100 ProteinMPNN-designed variants at 5 sampling temperatures
+7. **Certified robustness**: Randomized smoothing with 1,000 MC samples, empirical-certified gap ≤1%
 
 <details>
 <summary><b>ProteinMPNN Variant Diversity Distribution</b></summary>
 <p align="center">
   <img src="results/figures/mpnn_identity_distribution.png" width="80%" alt="MPNN Identity Distribution"/>
 </p>
-<p align="center"><em>Left: Sequence identity by sampling temperature. Right: Overall distribution. Higher temperature = more diverse variants.</em></p>
+</details>
+
+<details>
+<summary><b>Certified Robustness</b></summary>
+<p align="center">
+  <img src="results/figures/certified_robustness.png" width="85%" alt="Certified Robustness"/>
+</p>
+<p align="center"><em>Empirical vs certified accuracy under biological mutations. Gap ≤1%.</em></p>
 </details>
 
 <details>
@@ -71,21 +133,7 @@ AI protein design tools (ProteinMPNN) generate functional threat variants with a
 <p align="center">
   <img src="results/figures/training_curves.png" width="80%" alt="Training Curves"/>
 </p>
-<p align="center"><em>Converged in ~10 epochs to 0.9998 validation AUROC.</em></p>
 </details>
-
-## Certified Robustness
-
-<p align="center">
-  <img src="results/figures/certified_robustness.png" width="85%" alt="Certified Robustness"/>
-</p>
-<p align="center"><em>Empirical vs certified accuracy under biological mutations. Gap is at most 2% — screening decisions are provably stable.</em></p>
-
-We adapt randomized smoothing to biologically structured perturbation models:
-- **Conservative substitutions**: mutations within Dayhoff amino acid groups (function-preserving)
-- **Random substitutions**: unrestricted amino acid replacements
-
-The empirical-certified gap is **<=2%** across all tested mutation budgets (k=1 to k=10).
 
 ## Repository Structure
 
@@ -99,31 +147,33 @@ src/
     structures.py               AlphaFold DB structure download and PDB parsing
     proteinmpnn.py              ProteinMPNN inverse folding wrapper
   models/
-    embeddings.py               ESM-2 and ProTrek embedding extraction
-    contrastive.py              Supervised contrastive learning with hard-negative mining
+    embeddings.py               ESM-2 embedding and hidden state extraction
+    contrastive.py              AttentionPooling, MixupAugmenter, contrastive learning
   screening/
     baselines.py                K-mer, Cosine NN, Linear, KNN baseline screeners
     certified.py                Randomized smoothing for biological mutation spaces
   evaluation/
-    metrics.py                  AUROC, AUPRC, recall@precision, detection-vs-divergence
+    metrics.py                  Bootstrap CIs, paired significance tests, detection-vs-divergence
     experiments.py              Full experiment runner
-    visualize.py                Publication-quality figures
+    visualize.py                Publication-quality figures with CI error bars
 
 scripts/
   01_curate_data.py             Fetch and split data from UniProt
   02_extract_embeddings.py      Extract ESM-2 embeddings (GPU)
-  03_train_contrastive.py       Train contrastive screener (GPU)
-  04_evaluate.py                Evaluate all methods, generate figures
-  05_certify.py                 Certified robustness analysis (GPU)
+  03_train_contrastive.py       Train screener (--multi-scale, --mixup, --adversarial-augment)
+  04_evaluate.py                Evaluate with bootstrap CIs and paired tests
+  05_certify.py                 Certified robustness (1,000 MC samples)
   06_generate_mpnn_variants.py  ProteinMPNN adversarial generation (GPU)
+  07_ablation.py                Projection dim, temperature, hard neg ratio ablations
+  08_loso_cv.py                 Leave-one-subcategory-out cross-validation
+  09_ood_evaluation.py          Out-of-distribution false positive rates
+  10_second_family.py           Ribosome-inactivating protein generalization
 
 data/                           Curated datasets, embeddings, splits
-results/                        Checkpoints, figures, tables
+results/                        Checkpoints, figures, tables, ablation results
 ```
 
 ## Reproducing Results
-
-### Requirements
 
 ```bash
 git clone https://github.com/XAheli/AiXBio.git aixbio
@@ -131,38 +181,26 @@ cd aixbio
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-### Pipeline
-
-```bash
-# Step 1: Curate data from UniProt
+# Core pipeline
 python scripts/01_curate_data.py
-
-# Step 2: Extract ESM-2 embeddings
 python scripts/02_extract_embeddings.py --model esm2 --device cuda --batch-size 32
-
-# Step 3: Train contrastive screener
 python scripts/03_train_contrastive.py --embedding esm2 --device cuda --epochs 50
-
-# Step 4: Evaluate + generate figures
 python scripts/04_evaluate.py --embedding esm2
 
-# Step 5: Certified robustness
-python scripts/05_certify.py --embedding esm2 --device cuda --n-samples 200
-
-# Step 6: ProteinMPNN adversarial variants
+# ProteinMPNN adversarial variants
 git clone https://github.com/dauparas/ProteinMPNN.git
 export PYTHONPATH=$PYTHONPATH:$(pwd)/ProteinMPNN
 python scripts/06_generate_mpnn_variants.py --device cuda --structure-source alphafold
-
-# Step 7: Re-evaluate with MPNN split
 python scripts/04_evaluate.py --embedding esm2
+
+# Additional experiments
+python scripts/05_certify.py --embedding esm2 --device cuda
+python scripts/07_ablation.py --device cuda --embedding esm2
+python scripts/08_loso_cv.py --embedding esm2 --device cuda
+python scripts/09_ood_evaluation.py --device cuda --embedding esm2
+python scripts/10_second_family.py --device cuda
 ```
-
-## Threat Family
-
-This prototype focuses on **pore-forming toxins (PFTs)** — a well-annotated threat family with rich benign homologs (MACPF domain proteins, perforin, complement components). The framework generalizes to other threat families by modifying the UniProt queries in `src/config.py`.
 
 ## Citation
 
@@ -181,7 +219,10 @@ MIT License. See [LICENSE](LICENSE).
 
 ## Limitations and Dual-Use Considerations
 
-- Scoped to one threat family (pore-forming toxins) — generalization to other families requires validation
-- Detection rate degrades at extreme sequence divergence (<20% identity) — not a replacement for multi-layered screening
-- ProteinMPNN variant generation demonstrates a known attack vector — we disclose this to motivate defensive improvements
+- KNN baseline outperforms FuncScreen on MPNN adversarial split in aggregate AUROC (0.997 vs 0.991); ablation shows this gap closes with dim=512 or τ=0.2
+- Elevated OOD false positive rate on transcription factors (24%) — calibration needed
+- LOSO CV: pore-forming toxin subcategory poorly detected when held out (0.615 AUROC)
+- Primarily evaluated on one threat family; RIP mini-experiment provides preliminary generalization evidence
+- Certified robustness uses 1,000 MC samples (production requires 100,000+)
+- ProteinMPNN variant generation demonstrates a known attack vector — disclosed to motivate defensive improvements
 - This work is intended to strengthen biosecurity screening infrastructure, not to enable evasion

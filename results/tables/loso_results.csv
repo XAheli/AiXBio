@@ -1,0 +1,5 @@
+held_out_subcategory,n_held_out_threats,n_test_benign,AUROC,AUROC_CI,detection_rate_at_0.5
+hemolysin,169,100,0.9633,"[0.9348, 0.9863]",0.0000
+cytolysin_family,15,100,1.0000,"[1.0000, 1.0000]",1.0000
+pore_forming_toxin,17,100,0.6153,"[0.4523, 0.7754]",0.3529
+aerolysin_family,4,100,0.9975,"[0.9850, 1.0000]",0.0000

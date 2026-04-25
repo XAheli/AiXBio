@@ -42,9 +42,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--embedding", default="esm2", choices=["esm2", "protrek"])
     parser.add_argument("--device", default="cuda")
-    parser.add_argument("--n-samples", type=int, default=200,
+    parser.add_argument("--n-samples", type=int, default=1000,
                         help="Monte Carlo samples per sequence for certification")
-    parser.add_argument("--max-sequences", type=int, default=50,
+    parser.add_argument("--max-sequences", type=int, default=100,
                         help="Max sequences to certify (for speed)")
     args = parser.parse_args()
 

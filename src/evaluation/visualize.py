@@ -441,3 +441,275 @@ def plot_identity_distribution(
     plt.savefig(output_dir / "mpnn_identity_distribution.png")
     plt.close()
     logger.info("Saved MPNN identity distribution plot")
+
+
+def plot_detection_vs_divergence_with_ci(
+    divergence_results: dict[str, dict[str, dict]],
+    output_dir: Path | None = None,
+):
+    """
+    Detection rate vs divergence with bootstrap CI error bars.
+
+    Args:
+        divergence_results: {method_name: {bin_label: {detection_rate, ci_lower, ci_upper, n_samples}}}
+    """
+    if output_dir is None:
+        output_dir = FIGURES_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+
+    bin_labels = None
+    for method_name, bins_data in divergence_results.items():
+        if bin_labels is None:
+            bin_labels = list(bins_data.keys())
+        det_rates = [bins_data[b]["detection_rate"] for b in bin_labels]
+        ci_lo = [bins_data[b].get("ci_lower", det_rates[i]) for i, b in enumerate(bin_labels)]
+        ci_hi = [bins_data[b].get("ci_upper", det_rates[i]) for i, b in enumerate(bin_labels)]
+        n_samples = [bins_data[b]["n_samples"] for b in bin_labels]
+
+        color = METHOD_COLORS.get(method_name, "#333333")
+        label = METHOD_LABELS.get(method_name, method_name)
+        lw = 2.5 if "contrastive" in method_name else 1.5
+        marker = "o" if "contrastive" in method_name else "s"
+
+        x = range(len(bin_labels))
+        ax.plot(x, det_rates, color=color, linewidth=lw, marker=marker,
+                markersize=6, label=label)
+
+        # CI error bars
+        yerr_lo = [d - l for d, l in zip(det_rates, ci_lo)]
+        yerr_hi = [h - d for d, h in zip(det_rates, ci_hi)]
+        ax.errorbar(x, det_rates, yerr=[yerr_lo, yerr_hi],
+                    color=color, fmt='none', capsize=3, alpha=0.5)
+
+        for xi, n in zip(x, n_samples):
+            ax.annotate(f"n={n}", (xi, det_rates[xi]),
+                       textcoords="offset points", xytext=(0, 12),
+                       fontsize=7, alpha=0.5, ha="center")
+
+    if bin_labels:
+        ax.set_xticks(range(len(bin_labels)))
+        ax.set_xticklabels(bin_labels, rotation=30, ha="right")
+    ax.set_xlabel("K-mer Similarity to Nearest Training Threat")
+    ax.set_ylabel("Detection Rate")
+    ax.set_title("Detection Rate vs. Sequence Divergence (with 95% CI)")
+    ax.legend(loc="lower left", framealpha=0.9)
+    ax.set_ylim([-0.05, 1.05])
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "detection_vs_divergence_ci.pdf")
+    plt.savefig(output_dir / "detection_vs_divergence_ci.png")
+    plt.close()
+    logger.info("Saved detection vs divergence plot with CIs")
+
+
+def plot_mpnn_detection_vs_identity_with_ci(
+    method_results: dict[str, dict[str, dict]],
+    output_dir: Path | None = None,
+):
+    """
+    MPNN detection rate vs identity with bootstrap CI error bars.
+
+    Args:
+        method_results: {method_name: {bin_label: {detection_rate, ci_lower, ci_upper, n_samples}}}
+    """
+    if output_dir is None:
+        output_dir = FIGURES_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+
+    bin_labels = None
+    for method_name, bins_data in method_results.items():
+        if bin_labels is None:
+            bin_labels = list(bins_data.keys())
+
+        det_rates = [bins_data.get(b, {}).get("detection_rate", 0) for b in bin_labels]
+        ci_lo = [bins_data.get(b, {}).get("ci_lower", 0) for b in bin_labels]
+        ci_hi = [bins_data.get(b, {}).get("ci_upper", 0) for b in bin_labels]
+        n_samples = [bins_data.get(b, {}).get("n_samples", 0) for b in bin_labels]
+
+        color = METHOD_COLORS.get(method_name, "#333333")
+        label = METHOD_LABELS.get(method_name, method_name)
+        lw = 2.5 if "contrastive" in method_name else 1.5
+        marker = "o" if "contrastive" in method_name else "s"
+
+        x = range(len(bin_labels))
+        ax.plot(x, det_rates, color=color, linewidth=lw, marker=marker,
+                markersize=7, label=label)
+
+        yerr_lo = [max(0, d - l) for d, l in zip(det_rates, ci_lo)]
+        yerr_hi = [max(0, h - d) for d, h in zip(det_rates, ci_hi)]
+        ax.errorbar(x, det_rates, yerr=[yerr_lo, yerr_hi],
+                    color=color, fmt='none', capsize=3, alpha=0.5)
+
+        for xi, (dr, n) in enumerate(zip(det_rates, n_samples)):
+            ax.annotate(f"n={n}", (xi, dr),
+                       textcoords="offset points", xytext=(0, 14),
+                       fontsize=7, alpha=0.5, ha="center")
+
+    if bin_labels:
+        ax.set_xticks(range(len(bin_labels)))
+        ax.set_xticklabels(bin_labels, rotation=25, ha="right")
+    ax.set_xlabel("Sequence Identity to Original Threat (%)")
+    ax.set_ylabel("Detection Rate")
+    ax.set_title("Detection of MPNN Variants vs. Identity (with 95% CI)")
+    ax.legend(loc="lower left", framealpha=0.9)
+    ax.set_ylim([-0.05, 1.05])
+
+    ax.axhspan(0, 0.5, alpha=0.06, color="red")
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "mpnn_detection_vs_identity_ci.pdf")
+    plt.savefig(output_dir / "mpnn_detection_vs_identity_ci.png")
+    plt.close()
+    logger.info("Saved MPNN detection vs identity plot with CIs")
+
+
+def plot_ablation_results(
+    ablation_df: "pd.DataFrame",
+    output_dir: Path | None = None,
+):
+    """
+    2x3 grid of ablation plots: one subplot per ablation type,
+    showing AUROC vs parameter value for each evaluation split.
+    """
+    if output_dir is None:
+        output_dir = FIGURES_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    ablation_types = ablation_df["ablation_type"].unique()
+    n_types = len(ablation_types)
+    ncols = min(3, n_types)
+    nrows = (n_types + ncols - 1) // ncols
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows))
+    if n_types == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+
+    split_colors = {
+        "test_standard": "#0072BD",
+        "test_hard_negative": "#77AC30",
+        "test_seq_divergent": "#D95319",
+        "test_adversarial_mpnn": "#A2142F",
+    }
+
+    for i, atype in enumerate(ablation_types):
+        ax = axes[i]
+        subset = ablation_df[ablation_df["ablation_type"] == atype]
+
+        for split_name, color in split_colors.items():
+            split_data = subset[subset["split"] == split_name]
+            if len(split_data) == 0:
+                continue
+            vals = split_data["ablation_value"].astype(str).values
+            aurocs = split_data["AUROC"].astype(float).values
+            ax.plot(range(len(vals)), aurocs, "o-", color=color,
+                    linewidth=1.5, markersize=5,
+                    label=split_name.replace("test_", ""))
+
+        ax.set_xticks(range(len(vals)))
+        ax.set_xticklabels(vals, rotation=30, ha="right")
+        ax.set_title(atype.replace("_", " ").title())
+        ax.set_ylabel("AUROC")
+        ax.set_ylim([0.8, 1.02])
+        ax.legend(fontsize=7, loc="lower left")
+
+    for j in range(i + 1, len(axes)):
+        axes[j].set_visible(False)
+
+    plt.suptitle("Ablation Study", y=1.02, fontsize=14)
+    plt.tight_layout()
+    plt.savefig(output_dir / "ablation_results.pdf")
+    plt.savefig(output_dir / "ablation_results.png")
+    plt.close()
+    logger.info("Saved ablation results plot")
+
+
+def plot_loso_results(
+    loso_df: "pd.DataFrame",
+    output_dir: Path | None = None,
+):
+    """Bar chart of LOSO CV AUROC per held-out subcategory."""
+    if output_dir is None:
+        output_dir = FIGURES_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    subcats = loso_df["held_out_subcategory"].values
+    aurocs = loso_df["AUROC"].astype(float).values
+    n_held = loso_df["n_held_out_threats"].astype(int).values
+
+    bars = ax.bar(range(len(subcats)), aurocs, color="#D95319", alpha=0.8,
+                  edgecolor="black", linewidth=0.5)
+
+    for i, (bar, n) in enumerate(zip(bars, n_held)):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                f"n={n}", ha="center", fontsize=9)
+
+    ax.set_xticks(range(len(subcats)))
+    ax.set_xticklabels(subcats, rotation=30, ha="right")
+    ax.set_ylabel("AUROC")
+    ax.set_title("Leave-One-Subcategory-Out Cross-Validation")
+    ax.set_ylim([0, 1.1])
+    ax.axhline(y=0.9, color="gray", linestyle="--", alpha=0.5, label="0.9 threshold")
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "loso_cv.pdf")
+    plt.savefig(output_dir / "loso_cv.png")
+    plt.close()
+    logger.info("Saved LOSO CV plot")
+
+
+def plot_attention_heatmap(
+    attention_weights: np.ndarray,
+    sequence: str,
+    accession: str = "",
+    output_dir: Path | None = None,
+):
+    """
+    Heatmap of attention weights over protein sequence positions.
+
+    Shows which residues the model attends to for threat detection.
+    For pore-forming toxins, we expect high attention on the
+    pore-forming domain.
+    """
+    if output_dir is None:
+        output_dir = FIGURES_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(14, 2))
+
+    # attention_weights shape: (n_heads, seq_len) or (seq_len,)
+    if attention_weights.ndim == 2:
+        weights = attention_weights.mean(axis=0)
+    else:
+        weights = attention_weights
+
+    # Truncate for display
+    max_display = 200
+    if len(weights) > max_display:
+        weights = weights[:max_display]
+        sequence = sequence[:max_display]
+
+    ax.imshow(weights.reshape(1, -1), aspect="auto", cmap="Reds",
+              interpolation="nearest")
+    ax.set_yticks([])
+    ax.set_xlabel("Sequence Position")
+    ax.set_title(f"Attention Weights — {accession}" if accession else "Attention Weights")
+
+    # Mark positions with highest attention
+    top_k = min(10, len(weights))
+    top_positions = np.argsort(weights)[-top_k:]
+    for pos in top_positions:
+        ax.axvline(x=pos, color="blue", alpha=0.3, linewidth=0.5)
+
+    plt.tight_layout()
+    fname = f"attention_{accession}" if accession else "attention_heatmap"
+    plt.savefig(output_dir / f"{fname}.pdf")
+    plt.savefig(output_dir / f"{fname}.png")
+    plt.close()

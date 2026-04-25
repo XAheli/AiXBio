@@ -76,5 +76,62 @@ HARD_NEGATIVE_RATIO = 3  # hard negatives per positive
 EVAL_SPLITS = ["standard", "hard_negative", "seq_divergent", "adversarial"]
 SEQUENCE_IDENTITY_BINS = [0.9, 0.7, 0.5, 0.3, 0.2]  # for detection-vs-divergence curves
 
+# ── Attention pooling ──────────────────────────────────────────────────
+ATTENTION_HEADS = 1
+ATTENTION_HIDDEN_DIM = 256
+
+# ── Multi-scale classifier ────────────────────────────────────────────
+MULTI_SCALE_HIDDEN = 128
+
+# ── Mixup augmentation ────────────────────────────────────────────────
+MIXUP_ALPHA = 0.2  # Beta distribution parameter
+MIXUP_PROB = 0.5  # probability of applying mixup per batch
+
+# ── Bootstrap and statistical testing ─────────────────────────────────
+BOOTSTRAP_ITERATIONS = 1000
+BOOTSTRAP_CI_ALPHA = 0.05  # 95% CI
+
+# ── Ablation configs ──────────────────────────────────────────────────
+ABLATION_PROJECTION_DIMS = [128, 256, 512, 1024]
+ABLATION_HARD_NEGATIVE_RATIOS = [1, 3, 5]
+ABLATION_TEMPERATURES = [0.05, 0.07, 0.1, 0.2]
+ABLATION_FINETUNE_LAYERS = [0, 2, 4]
+
+# ── Certification upgrade ─────────────────────────────────────────────
+CERTIFICATION_N_SAMPLES = 1000
+CERTIFICATION_MAX_SEQUENCES = 100
+
+# ── OOD evaluation ────────────────────────────────────────────────────
+OOD_PROTEIN_FAMILIES = {
+    "kinases": '(keyword:KW-0418) AND (reviewed:true) AND (organism_id:9606)',
+    "gpcrs": '(keyword:KW-0297) AND (reviewed:true) AND (organism_id:9606)',
+    "transcription_factors": '(keyword:KW-0805) AND (reviewed:true) AND (organism_id:9606)',
+}
+OOD_MAX_PER_FAMILY = 100
+
+# ── Second threat family: Ribosome-Inactivating Proteins (RIPs) ──────
+RIP_THREAT_QUERIES = [
+    {
+        "query": '("ribosome-inactivating") AND (keyword:KW-0800) AND (reviewed:true)',
+        "label": "threat",
+        "subcategory": "rip_toxin",
+        "description": "Ribosome-inactivating proteins",
+    },
+    {
+        "query": '(gene:ricin OR gene:abrin) AND (keyword:KW-0800) AND (reviewed:true)',
+        "label": "threat",
+        "subcategory": "ricin_family",
+        "description": "Ricin/abrin family toxins",
+    },
+]
+RIP_BENIGN_QUERIES = [
+    {
+        "query": '(keyword:KW-0326) AND (NOT keyword:KW-0800) AND (reviewed:true)',
+        "label": "benign",
+        "subcategory": "glycosidase_nontoxin",
+        "description": "Glycosidases that are not toxins",
+    },
+]
+
 # ── Random seeds ───────────────────────────────────────────────────────
 SEED = 42

@@ -202,3 +202,94 @@ def load_embeddings(
     path = embeddings_dir / f"{split_name}_{model_type}_embeddings.npz"
     data = np.load(path)
     return data["embeddings"], data["accessions"]
+
+
+class ESM2HiddenStateExtractor:
+    """
+    Extract per-position hidden states from ESM-2 (not mean-pooled).
+    Required for AttentionPooling, which learns which positions to attend to.
+    """
+
+    def __init__(self, model_name: str = ESM2_MODEL_NAME, device: str = "cuda"):
+        from transformers import AutoModel, AutoTokenizer
+
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        logger.info(f"Loading ESM-2 for hidden state extraction on {self.device}...")
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name).to(self.device)
+        self.model.eval()
+
+    @torch.no_grad()
+    def extract_batch(self, sequences: list[str], batch_size: int = 4,
+                      max_length: int = ESM2_MAX_LENGTH) -> list[np.ndarray]:
+        """
+        Extract per-position hidden states for each sequence.
+
+        Returns list of arrays, each shape (seq_len, 1280). Lengths vary
+        per sequence since padding is stripped.
+        """
+        all_hidden = []
+
+        for i in tqdm(range(0, len(sequences), batch_size), desc="Hidden states"):
+            batch_seqs = [s[:max_length] for s in sequences[i:i + batch_size]]
+            inputs = self.tokenizer(
+                batch_seqs, return_tensors="pt", padding=True,
+                truncation=True, max_length=max_length + 2,
+            )
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+            outputs = self.model(**inputs)
+            hidden = outputs.last_hidden_state  # (batch, seq_len, 1280)
+            attention_mask = inputs["attention_mask"]
+
+            for j in range(hidden.shape[0]):
+                n_real = int(attention_mask[j].sum().item())
+                # Strip CLS (pos 0) and EOS (last real pos)
+                seq_hidden = hidden[j, 1:n_real - 1, :].cpu().numpy()
+                all_hidden.append(seq_hidden)
+
+        return all_hidden
+
+
+def extract_and_save_hidden_states(
+    df: pd.DataFrame,
+    device: str = "cuda",
+    batch_size: int = 4,
+    output_dir: Path | None = None,
+    split_name: str = "all",
+):
+    """
+    Extract and save per-position ESM-2 hidden states for attention pooling.
+
+    Saves as a dict of {accession: hidden_states_array} in a .npz file.
+    """
+    if output_dir is None:
+        output_dir = EMBEDDINGS_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    sequences = df["sequence"].tolist()
+    accessions = df["accession"].tolist()
+
+    extractor = ESM2HiddenStateExtractor(device=device)
+    hidden_states = extractor.extract_batch(sequences, batch_size=batch_size)
+
+    out_path = output_dir / f"{split_name}_esm2_hidden_states.npz"
+    save_dict = {acc: hs for acc, hs in zip(accessions, hidden_states)}
+    np.savez_compressed(out_path, **save_dict)
+    logger.info(f"Saved hidden states to {out_path} ({len(save_dict)} sequences)")
+
+    return hidden_states
+
+
+def load_hidden_states(
+    split_name: str = "all",
+    embeddings_dir: Path | None = None,
+) -> dict[str, np.ndarray]:
+    """Load per-position hidden states. Returns {accession: array}."""
+    if embeddings_dir is None:
+        embeddings_dir = EMBEDDINGS_DIR
+
+    path = embeddings_dir / f"{split_name}_esm2_hidden_states.npz"
+    data = np.load(path, allow_pickle=True)
+    return dict(data)
