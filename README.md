@@ -7,6 +7,11 @@
 [![ProteinMPNN](https://img.shields.io/badge/adversarial-ProteinMPNN-orange.svg)](https://github.com/dauparas/ProteinMPNN)
 [![Hackathon](https://img.shields.io/badge/AIxBio-Hackathon%202026-purple.svg)](https://apartresearch.com)
 
+> [!IMPORTANT]
+> **We came top 25% 👀**
+> 
+> **Project Submission**: View the official project page and hackathon submission on **[Apart Research](https://apartresearch.com/project/funcscreen-contrastive-plm-embeddings-for-evasionresistant-biosecurity-screening-j842)**
+
 > **TL;DR**: Current DNA screening checks if a sequence *looks like* a known threat. AI tools like ProteinMPNN design sequences that *function* identically but look nothing alike — evading all homology-based screening. FuncScreen detects threats by *function*, not *sequence*, closing this gap.
 
 ---
