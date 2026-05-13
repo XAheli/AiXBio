@@ -210,11 +210,13 @@ python scripts/10_second_family.py --device cuda
 ## Citation
 
 ```bibtex
-@inproceedings{poddar2026funcscreen,
-  title={FuncScreen: Contrastive PLM Embeddings for Evasion-Resistant Biosecurity Screening},
-  author={Poddar, Aheli},
-  booktitle={AIxBio Hackathon},
-  year={2026}
+@misc{poddar2026funcscreen,
+title={(HckPrj) FuncScreen: Contrastive PLM Embeddings for Evasion-Resistant Biosecurity Screening},
+author={Aheli Poddar},
+date={2026-04-26},
+organization={Apart Research},
+note={Research submission to the research sprint hosted by Apart.},
+howpublished={\url{https://apartresearch.com}}
 }
 ```
 
