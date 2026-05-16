@@ -8,7 +8,7 @@
 [![Hackathon](https://img.shields.io/badge/AIxBio-Hackathon%202026-purple.svg)](https://apartresearch.com)
 
 > [!IMPORTANT]
-> **We came top 25% 👀**
+> **We came in top 25% 👀**
 > 
 > **Project Submission**: View the official project page and hackathon submission on **[Apart Research](https://apartresearch.com/project/funcscreen-contrastive-plm-embeddings-for-evasionresistant-biosecurity-screening-j842)**
 
